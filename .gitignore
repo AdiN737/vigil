@@ -1,0 +1,26 @@
+# Build output — PyInstaller writes ~90 MB of Qt here. The release carries the
+# packaged zip; the repo carries source.
+build/
+dist/
+Vigil-dist/
+*.zip
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Windows / editors
+Thumbs.db
+desktop.ini
+*.lnk
+.vscode/
+.idea/
+
+# Runtime state — Vigil writes these into the user's home, never the repo,
+# but ignore them anyway in case someone runs from source in place.
+.vigil/
+sessions/
+log.txt
