@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 300" width="900" height="300"
+     role="img" aria-label="An agent event travels from Claude Code to the hook binary, which writes a JSON file into the .vigil folder; the widget polls that folder every 300 milliseconds. Your allow or deny answer returns from the widget straight back to the hook, which hands it to the agent.">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#A3ADBB"/>
+    </marker>
+    <marker id="b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#FF8C42"/>
+    </marker>
+  </defs>
+
+  <rect width="900" height="300" rx="14" fill="#0B0E13"/>
+
+  <text x="30" y="42" fill="#6B7583" font-size="12.5" letter-spacing="2.4"
+        font-family="ui-monospace,SFMono-Regular,Menlo,monospace">HOW AN EVENT REACHES YOU</text>
+
+  <!-- Narrow boxes and wide gaps, so every arrow label sits in clear space
+       instead of overhanging the box beside it. -->
+  <g font-family="system-ui,-apple-system,Segoe UI,sans-serif">
+    <g>
+      <rect x="30" y="80" width="150" height="76" rx="11" fill="#12171F" stroke="#222B37"/>
+      <text x="105" y="112" text-anchor="middle" fill="#EEF1F5" font-size="15" font-weight="600">Claude Code</text>
+      <text x="105" y="133" text-anchor="middle" fill="#6B7583" font-size="12"
+            font-family="ui-monospace,monospace">your terminal</text>
+    </g>
+    <g>
+      <rect x="260" y="80" width="150" height="76" rx="11" fill="#12171F" stroke="#222B37"/>
+      <text x="335" y="112" text-anchor="middle" fill="#EEF1F5" font-size="15" font-weight="600">vigil-hook.exe</text>
+      <text x="335" y="133" text-anchor="middle" fill="#6B7583" font-size="12"
+            font-family="ui-monospace,monospace">750 KB · 171 ms</text>
+    </g>
+    <g>
+      <rect x="490" y="80" width="150" height="76" rx="11" fill="#12171F" stroke="#222B37"/>
+      <text x="565" y="112" text-anchor="middle" fill="#EEF1F5" font-size="15" font-weight="600">~/.vigil</text>
+      <text x="565" y="133" text-anchor="middle" fill="#6B7583" font-size="12"
+            font-family="ui-monospace,monospace">JSON per session</text>
+    </g>
+    <g>
+      <rect x="720" y="80" width="150" height="76" rx="11" fill="#12171F" stroke="#222B37"/>
+      <text x="795" y="112" text-anchor="middle" fill="#EEF1F5" font-size="15" font-weight="600">the widget</text>
+      <text x="795" y="133" text-anchor="middle" fill="#6B7583" font-size="12"
+            font-family="ui-monospace,monospace">a dot on screen</text>
+    </g>
+  </g>
+
+  <g stroke="#A3ADBB" stroke-width="1.6" marker-end="url(#a)">
+    <line x1="180" y1="118" x2="256" y2="118"/>
+    <line x1="410" y1="118" x2="486" y2="118"/>
+    <line x1="640" y1="118" x2="716" y2="118"/>
+  </g>
+  <g fill="#6B7583" font-size="12" text-anchor="middle"
+     font-family="ui-monospace,SFMono-Regular,Menlo,monospace">
+    <text x="218" y="108">event</text>
+    <text x="448" y="108">writes</text>
+    <text x="678" y="108">polls 300ms</text>
+  </g>
+
+  <!-- the return path is the whole product, so it gets the one colour -->
+  <path d="M795 156 V 214 H 335 V 162" fill="none" stroke="#FF8C42" stroke-width="1.9" marker-end="url(#b)"/>
+  <text x="565" y="238" text-anchor="middle" fill="#FF8C42" font-size="13.5" font-weight="600"
+        font-family="ui-monospace,SFMono-Regular,Menlo,monospace">you press Approve — the answer goes straight back</text>
+  <text x="565" y="262" text-anchor="middle" fill="#6B7583" font-size="12.5"
+        font-family="ui-monospace,SFMono-Regular,Menlo,monospace">the agent unblocks without you touching the terminal</text>
+</svg>

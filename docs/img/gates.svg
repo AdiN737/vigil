@@ -1,0 +1,90 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 336" width="900" height="336"
+     role="img" aria-label="Five hundred agent events enter a narrowing funnel of five gates - is it actionable, have we already told you, are you already looking, is it too soon, can it be batched - and zero pop-ups come out. A separate red path shows destructive commands skipping every gate and always reaching you.">
+  <defs>
+    <marker id="g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#6B7583"/>
+    </marker>
+    <marker id="r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#FF3B3B"/>
+    </marker>
+  </defs>
+
+  <rect width="900" height="336" rx="14" fill="#0B0E13"/>
+
+  <text x="30" y="42" fill="#6B7583" font-size="12.5" letter-spacing="2.4"
+        font-family="ui-monospace,SFMono-Regular,Menlo,monospace">WHY IT DOES NOT SPAM YOU</text>
+
+  <text x="30" y="148" fill="#EEF1F5" font-size="34" font-weight="800"
+        font-family="system-ui,-apple-system,Segoe UI,sans-serif">500</text>
+  <text x="30" y="168" fill="#6B7583" font-size="12"
+        font-family="ui-monospace,monospace">events in</text>
+  <line x1="110" y1="138" x2="145" y2="138" stroke="#6B7583" stroke-width="1.6" marker-end="url(#g)"/>
+
+  <!-- gates narrow as they go: the shape is the argument -->
+  <g font-family="system-ui,-apple-system,Segoe UI,sans-serif">
+    <g>
+      <rect x="150" y="94" width="124" height="88" rx="10" fill="#12171F" stroke="#2E3A49"/>
+      <text x="212" y="118" text-anchor="middle" fill="#FF8C42" font-size="11.5"
+            font-family="ui-monospace,monospace">01</text>
+      <text x="212" y="140" text-anchor="middle" fill="#EEF1F5" font-size="13" font-weight="600">Is it</text>
+      <text x="212" y="157" text-anchor="middle" fill="#EEF1F5" font-size="13" font-weight="600">actionable?</text>
+    </g>
+    <g>
+      <rect x="286" y="100" width="118" height="76" rx="10" fill="#12171F" stroke="#222B37"/>
+      <text x="345" y="122" text-anchor="middle" fill="#FF8C42" font-size="11.5"
+            font-family="ui-monospace,monospace">02</text>
+      <text x="345" y="143" text-anchor="middle" fill="#EEF1F5" font-size="13" font-weight="600">Already</text>
+      <text x="345" y="159" text-anchor="middle" fill="#EEF1F5" font-size="13" font-weight="600">told you?</text>
+    </g>
+    <g>
+      <rect x="416" y="105" width="112" height="66" rx="10" fill="#12171F" stroke="#222B37"/>
+      <text x="472" y="125" text-anchor="middle" fill="#FF8C42" font-size="11.5"
+            font-family="ui-monospace,monospace">03</text>
+      <text x="472" y="145" text-anchor="middle" fill="#EEF1F5" font-size="13" font-weight="600">Already</text>
+      <text x="472" y="160" text-anchor="middle" fill="#EEF1F5" font-size="13" font-weight="600">looking?</text>
+    </g>
+    <g>
+      <rect x="540" y="110" width="106" height="56" rx="10" fill="#12171F" stroke="#222B37"/>
+      <text x="593" y="129" text-anchor="middle" fill="#FF8C42" font-size="11.5"
+            font-family="ui-monospace,monospace">04</text>
+      <text x="593" y="150" text-anchor="middle" fill="#EEF1F5" font-size="13" font-weight="600">Too soon?</text>
+    </g>
+    <g>
+      <rect x="658" y="114" width="100" height="48" rx="10" fill="#12171F" stroke="#222B37"/>
+      <text x="708" y="132" text-anchor="middle" fill="#FF8C42" font-size="11.5"
+            font-family="ui-monospace,monospace">05</text>
+      <text x="708" y="151" text-anchor="middle" fill="#EEF1F5" font-size="13" font-weight="600">Batch it?</text>
+    </g>
+  </g>
+
+  <g stroke="#6B7583" stroke-width="1.4" marker-end="url(#g)">
+    <line x1="274" y1="138" x2="282" y2="138"/>
+    <line x1="404" y1="138" x2="412" y2="138"/>
+    <line x1="528" y1="138" x2="536" y2="138"/>
+    <line x1="646" y1="138" x2="654" y2="138"/>
+    <line x1="758" y1="138" x2="790" y2="138"/>
+  </g>
+
+  <text x="798" y="148" fill="#FF8C42" font-size="34" font-weight="800"
+        font-family="system-ui,-apple-system,Segoe UI,sans-serif">0</text>
+  <text x="798" y="168" fill="#6B7583" font-size="12"
+        font-family="ui-monospace,monospace">pop-ups</text>
+
+  <!-- The exception has its OWN destination. It must never appear to feed the
+       zero: destructive commands interrupt you every single time. -->
+  <path d="M120 152 V 232 H 690" fill="none" stroke="#FF3B3B" stroke-width="1.7"
+        stroke-dasharray="5 4" marker-end="url(#r)"/>
+  <rect x="700" y="210" width="170" height="44" rx="10" fill="#1A0F0F" stroke="#FF3B3B"/>
+  <text x="785" y="237" text-anchor="middle" fill="#FF3B3B" font-size="13" font-weight="700"
+        font-family="system-ui,-apple-system,Segoe UI,sans-serif">always reaches you</text>
+
+  <text x="30" y="238" fill="#FF3B3B" font-size="12.5" font-weight="600"
+        font-family="ui-monospace,SFMono-Regular,Menlo,monospace">destructive</text>
+  <text x="30" y="256" fill="#6B7583" font-size="12"
+        font-family="ui-monospace,SFMono-Regular,Menlo,monospace">skips every gate</text>
+
+  <text x="450" y="296" text-anchor="middle" fill="#6B7583" font-size="12.5"
+        font-family="ui-monospace,SFMono-Regular,Menlo,monospace">rm -rf · git push --force · drop table · terraform apply</text>
+  <text x="450" y="318" text-anchor="middle" fill="#6B7583" font-size="12.5"
+        font-family="ui-monospace,SFMono-Regular,Menlo,monospace">being quiet there is worse than being annoying</text>
+</svg>
