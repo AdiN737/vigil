@@ -32,6 +32,22 @@ So you start checking. Alt-tab, glance, alt-tab back. Except checking **is** the
 
 <br>
 
+## On a real screen
+
+The two states that matter, on an actual desktop. Both screens below are the
+real widget at real size — 292 × 104 px for the pill, 26 px for the dot —
+composited into a photograph, not an artist's impression of a UI.
+
+<div align="center">
+<img src="docs/img/desk-quiet.jpg" width="880" alt="A monitor on a desk at dusk. Claude Code is mid-build in a terminal, and Vigil is a single small blue dot in the bottom-right corner of the screen, magnified in an inset to show it is 26 by 26 pixels.">
+<br><em>Agent working. A 26px dot, and nothing else. This is most of the day.</em>
+<br><br>
+<img src="docs/img/desk-approve.jpg" width="880" alt="The same desk. The terminal is blocked asking permission to run git push --force origin main, and Vigil has unfurled into a red pill in the corner of the screen with Approve anyway and Deny buttons, magnified in an inset.">
+<br><em>Blocked on a force-push. The pill opens, and you answer it from there.</em>
+</div>
+
+<br>
+
 ## What it does
 
 A small dot lives in the corner of your screen. Most of the time, that is all it is.
