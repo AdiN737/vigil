@@ -71,20 +71,51 @@ def self_command():
 def hook_command(state):
     """How Claude Code should invoke the HOOK.
 
-    Frozen builds use a separate, Qt-free vigil-hook.exe. Pointing the hook at
-    the Qt-linked widget cost ~3 seconds per agent event; this one is ~200ms.
+    Frozen builds use a separate, Qt-free hook binary. Pointing the hook at the
+    Qt-linked widget cost ~3 seconds per agent event; the split one is ~200ms,
+    and that gap is the whole reason two binaries exist.
+
+    On macOS a .app bundle puts sys.executable inside Contents/MacOS, so the
+    sibling hook binary is looked for there as well as next to the bundle.
     """
+    exe = "vigil-hook.exe" if os.name == "nt" else "vigil-hook"
     if getattr(sys, "frozen", False):
         here = os.path.dirname(sys.executable)
-        for cand in (os.path.join(here, "hook", "vigil-hook.exe"),
-                     os.path.join(here, "vigil-hook.exe")):
+        cands = [os.path.join(here, "hook", exe), os.path.join(here, exe)]
+        if sys.platform == "darwin":
+            # .../Vigil.app/Contents/MacOS/Vigil -> also try Resources and the
+            # directory the bundle itself sits in.
+            cands += [
+                os.path.join(here, "..", "Resources", exe),
+                os.path.join(here, "..", "..", "..", exe),
+            ]
+        for cand in cands:
+            cand = os.path.normpath(cand)
             if os.path.exists(cand):
-                return f'"{cand}" {state}'
+                return _quote([cand, state])
         parts = [sys.executable, "--hook", state]     # fallback, slower
     else:
         parts = [sys.executable, os.path.abspath(
             os.path.join(os.path.dirname(__file__), "vigil_hook_main.py")), state]
-    return " ".join(f'"{p}"' if " " in p else p for p in parts)
+    return _quote(parts)
+
+
+def _quote(parts):
+    """Quote for the shell Claude Code will run the hook through.
+
+    Windows uses double quotes; POSIX shells need single quotes, or a path with
+    a space in it silently becomes two arguments.
+    """
+    out = []
+    for p in parts:
+        p = str(p)
+        if " " not in p:
+            out.append(p)
+        elif os.name == "nt":
+            out.append(f'"{p}"')
+        else:
+            out.append("'" + p.replace("'", "'\''") + "'")
+    return " ".join(out)
 
 
 # ---------------------------------------------------------------- hooks
@@ -164,42 +195,16 @@ def hooks_installed():
 
 
 # ---------------------------------------------------------------- autostart
-RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
+# Registry Run key on Windows, a LaunchAgent plist on macOS.
+from vigil_platform import (                                     # noqa: E402
+    set_autostart as _set_autostart,
+    is_autostart,
+)
 
 
 def set_autostart(on):
-    if os.name != "nt":
-        return False
-    try:
-        import winreg
-        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN_KEY, 0,
-                            winreg.KEY_SET_VALUE) as k:
-            if on:
-                cmd = " ".join(f'"{p}"' if " " in p else p for p in self_command())
-                winreg.SetValueEx(k, "Vigil", 0, winreg.REG_SZ, cmd)
-            else:
-                try:
-                    winreg.DeleteValue(k, "Vigil")
-                except FileNotFoundError:
-                    pass
-        return True
-    except Exception:
-        return False
+    return _set_autostart(on, self_command())
 
-
-def is_autostart():
-    if os.name != "nt":
-        return False
-    try:
-        import winreg
-        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN_KEY) as k:
-            winreg.QueryValueEx(k, "Vigil")
-        return True
-    except Exception:
-        return False
-
-
-# ---------------------------------------------------------------- uninstall
 def full_uninstall(remove_data=True):
     msgs = []
     ok, m = uninstall_hooks(); msgs.append(m)

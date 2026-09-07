@@ -1,0 +1,9 @@
+# The widget's UI. Cross-platform.
+PySide6>=6.6
+
+# Windows-only. The marker matters: without it, `pip install -r` fails
+# outright on macOS and Linux instead of just skipping this line.
+pywin32>=306; sys_platform == "win32"
+
+# Build only — not needed to run from source.
+# pyinstaller>=6.0

@@ -7,6 +7,7 @@
 [![Release](https://img.shields.io/github/v/release/AdiN737/vigil?color=FF8C42&labelColor=12171F&label=release)](https://github.com/AdiN737/vigil/releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/AdiN737/vigil/total?color=3DD68C&labelColor=12171F)](https://github.com/AdiN737/vigil/releases)
 ![Platform](https://img.shields.io/badge/platform-Windows%2010%20%26%2011-4C8DFF?labelColor=12171F)
+![macOS](https://img.shields.io/badge/macOS-source%20only%2C%20untested-6B7583?labelColor=12171F)
 ![License](https://img.shields.io/badge/license-MIT-6B7583?labelColor=12171F)
 
 **Free · No account · No telemetry · No network calls**
@@ -119,6 +120,23 @@ Then look at the **bottom-right of your screen**, roughly an inch above the task
 
 <br>
 
+## macOS
+
+**Not yet.** There is no Mac binary, and nobody has run it on a Mac.
+
+What does exist: the source is fully cross-platform. Everything that used to be
+Windows-only — reading the focused window title, raising a window, the
+single-instance lock, start-at-login — has a real macOS implementation in
+[`app/vigil_platform.py`](app/vigil_platform.py), with PyInstaller specs and an
+installer alongside it.
+
+PyInstaller can't cross-compile, so the `.app` has to be built on a Mac. If you
+have one, [**docs/MACOS.md**](docs/MACOS.md) is the build guide — and whether it
+works or falls over, [say so in an issue](https://github.com/AdiN737/vigil/issues).
+That is the only thing between this and a real macOS release.
+
+<br>
+
 ## What it can see
 
 You're about to run an unsigned binary that watches your coding agent. That deserves a straight answer.
@@ -178,7 +196,7 @@ A screen widget can only reach you while you're looking at a screen. The decisio
 | | Status |
 |---|---|
 | The widget — Windows, Claude Code | ✅ **shipping now** |
-| macOS build from the same core | 🔨 planned |
+| macOS build from the same core | 🔨 source ported, needs building + testing on a Mac |
 | Watching ChatGPT, Gemini, Cursor via a browser extension bridged to the desktop app | 🔨 planned |
 | Physical desk device — LED ring, round display, a dial you press to approve | 📐 designed, not built |
 

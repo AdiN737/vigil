@@ -147,60 +147,15 @@ def ago(t):
     return f"{s // 3600}h{(s % 3600) // 60:02d}"
 
 
-# ------------------------------------------------- best-effort window focus
-def focus_window_for(project):
-    if os.name != "nt" or not project:
-        return False
-    try:
-        import win32gui, win32con
-    except Exception:
-        return False
-    needles = [project.lower(), "claude"]
-    found = []
-
-    def cb(hwnd, _):
-        if not win32gui.IsWindowVisible(hwnd):
-            return
-        title = win32gui.GetWindowText(hwnd)
-        if not title:
-            return
-        low = title.lower()
-        for rank, needle in enumerate(needles):
-            if needle in low:
-                found.append((rank, hwnd))
-                break
-
-    try:
-        win32gui.EnumWindows(cb, None)
-    except Exception:
-        return False
-    if not found:
-        return False
-    found.sort()
-    hwnd = found[0][1]
-    try:
-        if win32gui.IsIconic(hwnd):
-            win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
-        u32 = ctypes.windll.user32
-        cur = u32.GetWindowThreadProcessId(u32.GetForegroundWindow(), None)
-        tgt = u32.GetWindowThreadProcessId(hwnd, None)
-        u32.AttachThreadInput(cur, tgt, True)
-        win32gui.SetForegroundWindow(hwnd)
-        u32.AttachThreadInput(cur, tgt, False)
-        return True
-    except Exception:
-        return False
-
-
-def foreground_title():
-    """Title of the window the user is actually looking at."""
-    if os.name != "nt":
-        return ""
-    try:
-        import win32gui
-        return (win32gui.GetWindowText(win32gui.GetForegroundWindow()) or "").lower()
-    except Exception:
-        return ""
+# ----------------------------------------------- platform-specific bits
+# Window focus, foreground title, the single-instance lock and autostart
+# all differ per OS. They live in vigil_platform so this file does not have
+# to know - and so macOS gets a real implementation instead of an early
+# `return False`.
+from vigil_platform import (                                     # noqa: E402
+    focus_window_for, foreground_title,
+    single_instance as _single_instance,
+)
 
 
 def already_looking(sessions):
@@ -776,36 +731,14 @@ def start_demo(stack):
     QTimer.singleShot(90000, lambda: start_demo(stack))
 
 
-_LOCK = None
-
-
 def claim_single_instance():
     """True if we are the only Vigil. False if one is already running.
 
-    A Windows named mutex, not QSharedMemory: the Qt version silently failed in
-    the frozen build and let a second dot appear on screen. The mutex is owned
-    by the kernel and released automatically when the process dies, so a crash
-    cannot leave a stale lock.
+    Windows gets a kernel named mutex, POSIX an exclusive flock - see
+    vigil_platform. Before that, non-Windows had no guard at all, which is
+    exactly how five dots once ended up on one screen.
     """
-    global _LOCK
-    if os.name == "nt":
-        try:
-            import ctypes
-            from ctypes import wintypes
-            k32 = ctypes.windll.kernel32
-            k32.CreateMutexW.restype = wintypes.HANDLE
-            _LOCK = k32.CreateMutexW(None, True, "Global\VigilWidgetSingleInstance")
-            ERROR_ALREADY_EXISTS = 183
-            if k32.GetLastError() == ERROR_ALREADY_EXISTS:
-                return False
-            return True
-        except Exception:
-            pass                       # fall through to the Qt mechanism
-    try:
-        _LOCK = QSharedMemory("vigil-widget-single-instance")
-        return _LOCK.create(1)
-    except Exception:
-        return True                    # never block startup over a failed guard
+    return _single_instance()
 
 
 def main():

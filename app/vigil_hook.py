@@ -115,23 +115,19 @@ def prune():
 
 
 def _user_is_at(project):
-    """True if the foreground window looks like the session asking. If so we do
-    NOT hijack the prompt - they are staring right at it."""
-    # A 1-2 character project name would match almost any window title and
-    # silently disable approvals everywhere. The widget guards this the same way.
-    if os.name != "nt" or not project or len(project) < 3:
+    """True if the user is already looking at the window that wants them.
+
+    A 1-2 character project name would match almost any window title and
+    silently disable approvals everywhere, so short names never match.
+    The widget guards this the same way.
+    """
+    if not project or len(project) < 3:
         return False
     try:
-        import ctypes
-        u = ctypes.windll.user32
-        h = u.GetForegroundWindow()
-        n = u.GetWindowTextLengthW(h)
-        buf = ctypes.create_unicode_buffer(n + 1)
-        u.GetWindowTextW(h, buf, n + 1)
-        return project.lower() in buf.value.lower()
+        from vigil_platform import foreground_title
+        return project.lower() in foreground_title()
     except Exception:
         return False
-
 
 def main(state=None):
     if state is None:

@@ -1,0 +1,19 @@
+# Default: let git normalise text in the repo.
+* text=auto
+
+# These MUST stay LF. A shell script checked out with CRLF fails on macOS and
+# Linux with "bad interpreter: /bin/bash^M" — the installer would simply not
+# run, with an error that gives no hint why.
+*.sh        text eol=lf
+*.command   text eol=lf
+*.plist     text eol=lf
+
+# Windows batch files must stay CRLF for the same class of reason.
+*.bat       text eol=crlf
+*.cmd       text eol=crlf
+
+# Never touch binaries.
+*.png       binary
+*.stl       binary
+*.3mf       binary
+*.zip       binary
