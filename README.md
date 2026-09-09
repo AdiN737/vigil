@@ -12,7 +12,7 @@
 
 **Free · No account · No telemetry · No network calls**
 
-[**⬇ Download for Windows**](https://github.com/AdiN737/vigil/releases/latest) &nbsp;·&nbsp; [How it works](#how-it-works) &nbsp;·&nbsp; [Why it won't spam you](#why-it-doesnt-spam-you) &nbsp;·&nbsp; [Install](#install)
+[**⬇ Download for Windows**](https://github.com/AdiN737/vigil/releases/latest) &nbsp;·&nbsp; [vigilit.app](https://vigilit.app) &nbsp;·&nbsp; [How it works](#how-it-works) &nbsp;·&nbsp; [Why it won't spam you](#why-it-doesnt-spam-you) &nbsp;·&nbsp; [Install](#install)
 
 <br>
 
