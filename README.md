@@ -6,9 +6,9 @@
 
 [![Release](https://img.shields.io/github/v/release/AdiN737/vigil?color=FF8C42&labelColor=12171F&label=release)](https://github.com/AdiN737/vigil/releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/AdiN737/vigil/total?color=3DD68C&labelColor=12171F)](https://github.com/AdiN737/vigil/releases)
-![Platform](https://img.shields.io/badge/platform-Windows%2010%20%26%2011-4C8DFF?labelColor=12171F)
-![macOS](https://img.shields.io/badge/macOS-source%20only%2C%20untested-6B7583?labelColor=12171F)
-![License](https://img.shields.io/badge/license-MIT-6B7583?labelColor=12171F)
+[![Platform](https://img.shields.io/badge/platform-Windows%2010%20%26%2011-4C8DFF?labelColor=12171F)](#install)
+[![macOS](https://img.shields.io/badge/macOS-run%20from%20source-6B7583?labelColor=12171F)](#macos)
+[![License](https://img.shields.io/badge/license-MIT-6B7583?labelColor=12171F)](LICENSE)
 
 **Free · No account · No telemetry · No network calls**
 
@@ -120,7 +120,7 @@ In testing, **500 agent events across five concurrent sessions produced zero pop
 
 **1.** Download the latest zip:
 
-[![Download](https://img.shields.io/badge/⬇_Download_Vigil-FF8C42?style=for-the-badge&labelColor=12171F)](https://github.com/AdiN737/vigil/releases/latest)
+[![Download](https://img.shields.io/badge/Download_Vigil-FF8C42?style=for-the-badge&labelColor=12171F)](https://github.com/AdiN737/vigil/releases/latest)
 
 **2. Extract it properly** — right-click → *Extract All*. Don't run it from inside the zip preview; Windows unpacks that to a temp folder and the install won't stick.
 
@@ -138,18 +138,37 @@ Then look at the **bottom-right of your screen**, roughly an inch above the task
 
 ## macOS
 
-**Not yet.** There is no Mac binary, and nobody has run it on a Mac.
+**There is no Mac download yet.** PyInstaller cannot cross-compile and Vigil was
+built on Windows, so no `.app` exists. The source is fully cross-platform
+though, and runs from source in about a minute:
 
-What does exist: the source is fully cross-platform. Everything that used to be
-Windows-only — reading the focused window title, raising a window, the
-single-instance lock, start-at-login — has a real macOS implementation in
-[`app/vigil_platform.py`](app/vigil_platform.py), with PyInstaller specs and an
-installer alongside it.
+```bash
+git clone https://github.com/AdiN737/vigil.git
+cd vigil && python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+python3 app/vigil_setup.py --install   # registers the Claude Code hooks
+python3 app/vigil_widget.py            # starts the widget
+```
 
-PyInstaller can't cross-compile, so the `.app` has to be built on a Mac. If you
-have one, [**docs/MACOS.md**](docs/MACOS.md) is the build guide — and whether it
-works or falls over, [say so in an issue](https://github.com/AdiN737/vigil/issues).
-That is the only thing between this and a real macOS release.
+Then two things that are not optional:
+
+1. **System Settings → Privacy & Security → Accessibility** → enable your
+   terminal. Without it Vigil still runs, but it cannot tell when you are
+   already looking at the window that needs you, so it gets chattier.
+2. **Restart Claude Code.** Hooks load when a session starts.
+
+Uninstall with `python3 app/vigil_setup.py --uninstall`.
+
+> **Nobody has run this on a Mac yet.** Everything Windows-only — reading the
+> focused window title, raising a window, the single-instance lock,
+> start-at-login — has a real macOS implementation in
+> [`app/vigil_platform.py`](app/vigil_platform.py), and the imports are
+> verified clean. But it is untested, and the Qt frameless always-on-top window
+> is the most likely thing to misbehave across Spaces and full-screen apps.
+> If you try it, [tell me what happened](https://github.com/AdiN737/vigil/issues)
+> — "the dot never appeared" is as useful as "it works".
+
+To build a real `.app` instead, see [docs/MACOS.md](docs/MACOS.md).
 
 <br>
 
