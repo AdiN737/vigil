@@ -61,3 +61,7 @@ scraping is less stable and cannot safely own OS-level approvals.
 6. Add contract tests before adding installer UI.
 
 Do not copy the widget for each provider. One queue is the product.
+
+Windows Codex session filenames use a digest of the full identity; approval
+requests use UUIDs so provider IDs never become invalid Windows paths. See
+[Codex setup and verification](CODEX.md) for the local preview status.

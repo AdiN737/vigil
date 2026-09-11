@@ -18,7 +18,7 @@ would only delay the prompt they are staring at.
 import json, os, time
 
 HOME = os.path.expanduser("~")
-DATA = os.path.join(HOME, ".vigil")
+DATA = os.environ.get("VIGIL_DATA_DIR") or os.path.join(HOME, ".vigil")
 DECISIONS = os.path.join(DATA, "decisions")
 REQUESTS = os.path.join(DATA, "requests")
 

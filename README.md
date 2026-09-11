@@ -12,7 +12,7 @@
 
 **Free · No account · No telemetry · No network calls**
 
-**Ships today:** Windows + Claude Code. **In source:** the Codex/ChatGPT coding-agent adapter, ready for real-machine validation and the next packaged release.
+**Public release:** Windows + Claude Code. **Codex preview:** implemented and tested through compiled hook processes; local activation requires a one-time hook review. See [Codex setup and verification](docs/CODEX.md).
 
 [**⬇ Download for Windows**](https://github.com/AdiN737/vigil/releases/latest) &nbsp;·&nbsp; [vigilit.app](https://vigilit.app) &nbsp;·&nbsp; [How it works](#how-it-works) &nbsp;·&nbsp; [Why it won't spam you](#why-it-doesnt-spam-you) &nbsp;·&nbsp; [Install](#install)
 

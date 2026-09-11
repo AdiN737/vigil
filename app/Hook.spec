@@ -7,10 +7,10 @@ a = Analysis(
     excludes=['PySide6','shiboken6','tkinter','matplotlib','numpy','PIL','pytest',
               'unittest','email','http','xml','pydoc_data','sqlite3','ssl',
               'asyncio','multiprocessing','logging','decimal','pickle','socket',
-              'lzma','bz2','hashlib','csv','argparse','difflib','inspect'],
+              'lzma','bz2','csv','argparse','difflib','inspect'],
     noarchive=False,
 )
 pyz = PYZ(a.pure)
 exe = EXE(pyz, a.scripts, [], exclude_binaries=True,
-          name='vigil-hook', console=False, icon=None)
+          name='vigil-hook', console=True, icon=None)
 coll = COLLECT(exe, a.binaries, a.datas, name='vigil-hook')

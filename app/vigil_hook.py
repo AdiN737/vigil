@@ -11,7 +11,7 @@ TWO HARD RULES:
   2. Stay FAST. This runs in Claude's critical path. No glob, no re, no
      directory scans on the hot path. Measured: see _bench.py.
 """
-import sys, os, json, time
+import sys, os, json, time, hashlib, uuid
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -26,7 +26,7 @@ def _data_dir():
     # writes there into a hidden per-package sandbox, so notify.py and the
     # widget would silently look in different folders the moment either one
     # runs under a different Python. The home directory is not virtualized.
-    d = os.path.join(os.path.expanduser("~"), ".vigil")
+    d = os.environ.get("VIGIL_DATA_DIR") or os.path.join(os.path.expanduser("~"), ".vigil")
     try:
         os.makedirs(d, exist_ok=True)
     except Exception:
@@ -135,6 +135,8 @@ def tier_for(state, blob):
 def session_file(sid):
     """Sanitise without importing re - it costs ~15ms of startup."""
     s = "".join(c if c in SAFE else "_" for c in str(sid))[:80]
+    if str(sid).startswith("codex:"):
+        s = "codex_" + hashlib.sha256(str(sid).encode()).hexdigest()
     return os.path.join(SESSIONS, (s or "unknown") + ".json")
 
 
@@ -213,7 +215,7 @@ def main(state=None, provider_hint=None):
 
     try:
         os.makedirs(SESSIONS, exist_ok=True)
-        tmp = path + ".tmp"
+        tmp = path + f".{os.getpid()}.tmp"
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(rec, f)
         os.replace(tmp, path)          # atomic, so the widget never sees a half-file
@@ -238,12 +240,23 @@ def main(state=None, provider_hint=None):
         try:
             import vigil_decide as VD
             if not _user_is_at(project):        # they'd just use the terminal
-                rid = f"{sid}-{int(time.time()*1000)}"
+                rid = uuid.uuid4().hex
                 VD.open_request(rid, str(sid), project, tool, detail, tier,
                                 provider)
-                verdict = VD.await_decision(rid)
-                VD.close_request(rid)
+                try:
+                    verdict = VD.await_decision(rid)
+                finally:
+                    VD.close_request(rid)
                 if verdict in ("allow", "deny"):
+                    # Resolve the actionable record immediately; no later tool hook
+                    # is needed to clear the widget after a decision.
+                    rec.update(state="working" if verdict == "allow" else "idle",
+                               tier=2 if verdict == "allow" else 1,
+                               label="working" if verdict == "allow" else "idle",
+                               since=time.time(), updated=time.time())
+                    with open(tmp, "w", encoding="utf-8") as f:
+                        json.dump(rec, f)
+                    os.replace(tmp, path)
                     print(json.dumps(approval_output(provider, verdict)))
                     return 0
         except Exception:

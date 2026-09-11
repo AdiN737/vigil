@@ -28,6 +28,13 @@ class ProviderContractTests(unittest.TestCase):
         self.assertEqual(sid, "codex:thr_1:agent_2")
         self.assertEqual(native, "thr_1")
 
+    def test_long_codex_ids_do_not_collide_or_use_windows_reserved_characters(self):
+        prefix = "codex:" + "a" * 100
+        first = vigil_hook.session_file(prefix + ":worker1")
+        second = vigil_hook.session_file(prefix + ":worker2")
+        self.assertNotEqual(first, second)
+        self.assertNotIn(":", os.path.basename(first))
+
     def test_claude_session_ids_remain_backward_compatible(self):
         sid, native = vigil_hook.identity_for({"session_id": "abc"}, "claude")
         self.assertEqual((sid, native), ("abc", "abc"))
@@ -84,7 +91,7 @@ class ProviderContractTests(unittest.TestCase):
                  mock.patch.object(vigil_hook, "LOG", os.path.join(td, "log")), \
                  mock.patch("sys.stdin", io.StringIO(json.dumps(payload))):
                 self.assertEqual(vigil_hook.main("working", "codex"), 0)
-            with open(os.path.join(sessions, "codex_thr_9.json"),
+            with open(os.path.join(sessions, "codex_" + vigil_hook.hashlib.sha256(b"codex:thr_9").hexdigest() + ".json"),
                       encoding="utf-8") as f:
                 record = json.load(f)
         self.assertEqual(record["schema"], 1)

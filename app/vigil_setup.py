@@ -35,6 +35,7 @@ CODEX_HOOK_MAP = {
     "UserPromptSubmit": "working", "PermissionRequest": "blocked",
     "Stop": "done", "SessionEnd": "idle",
     "SubagentStart": "working", "SubagentStop": "done",
+    "Interrupt": "idle",
 }
 
 MARK = "vigil"          # how we recognise our own hooks to remove them later
@@ -217,7 +218,7 @@ def install_codex_hooks():
         hooks = cfg.setdefault("hooks", {})
         for event, state in CODEX_HOOK_MAP.items():
             timeout = 50 if event == "PermissionRequest" else (
-                3 if event == "SessionEnd" else 5)
+                3 if event in ("SessionEnd", "Interrupt") else 5)
             entry = {"hooks": [{
                 "type": "command",
                 "command": hook_command(state, "codex"),
@@ -325,9 +326,17 @@ def full_uninstall(remove_data=True):
 
 
 if __name__ == "__main__":
-    arg = sys.argv[1] if len(sys.argv) > 1 else "status"
+    arg = sys.argv[1].lstrip("-") if len(sys.argv) > 1 else "status"
     if arg == "install":
         print(install_hooks()[1])
+    elif arg == "install-codex":
+        ok, message = install_codex_hooks()
+        print(message)
+        sys.exit(0 if ok else 1)
+    elif arg == "uninstall-codex":
+        ok, message = uninstall_codex_hooks()
+        print(message)
+        sys.exit(0 if ok else 1)
     elif arg == "uninstall":
         print(full_uninstall()[1])
     else:
