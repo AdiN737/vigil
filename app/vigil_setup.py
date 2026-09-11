@@ -290,7 +290,8 @@ def codex_hooks_installed():
 
 
 def install_hooks():
-    results = (install_claude_hooks(), install_codex_hooks())
+    from vigil_skill import install_skill
+    results = (install_claude_hooks(), install_codex_hooks(), install_skill())
     return all(ok for ok, _ in results), "\n".join(msg for _, msg in results)
 
 
@@ -329,6 +330,11 @@ if __name__ == "__main__":
     arg = sys.argv[1].lstrip("-") if len(sys.argv) > 1 else "status"
     if arg == "install":
         print(install_hooks()[1])
+    elif arg == "install-skill":
+        from vigil_skill import install_skill
+        ok, message = install_skill()
+        print(message)
+        sys.exit(0 if ok else 1)
     elif arg == "install-codex":
         ok, message = install_codex_hooks()
         print(message)

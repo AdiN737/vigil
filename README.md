@@ -207,6 +207,13 @@ docs/HARDWARE.md     build guide for the physical device
 
 <br>
 
+## Ask Codex to start Vigil
+
+The current installer includes a Codex skill. After installation, open a fresh
+Codex task and say **start vigil**. It starts the widget quietly or reports
+that it is already running. See [setup instructions](docs/CODEX.md#start-vigil-by-asking-codex)
+for existing installations. The public v0.1.1 ZIP does not include the skill.
+
 ## Running from source
 
 Needs Python 3.11+ and PySide6.

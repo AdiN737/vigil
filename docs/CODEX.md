@@ -58,3 +58,21 @@ python -m unittest discover -s tests -p test_hook_process.py -v
 `VIGIL_DATA_DIR` isolates test events from real sessions. Do not set it for normal
 usage. Source setup accepts `install-codex` or `--install-codex`; it preserves
 other hooks and backs up the configuration first.
+
+## Start Vigil by asking Codex
+
+Once the skill is installed, say **start vigil** in a fresh Codex task. Codex
+runs a bundled launcher, checks whether the widget is already running, and
+starts it quietly if necessary. You can also ask **is Vigil running?** or
+**stop vigil**.
+
+Current source installers register this skill automatically in
+`~/.agents/skills/vigil`. To add it to an existing Vigil installation, run:
+
+```powershell
+python app/vigil_setup.py install-skill
+```
+
+The skill needs to be installed once on each computer. It cannot start an app
+that has not been downloaded and installed. The public v0.1.1 ZIP predates this
+feature. Launching the widget does not bypass Codex's one-time `/hooks` review.
