@@ -16,6 +16,7 @@ HOME = os.path.expanduser("~")
 DATA = os.path.join(HOME, ".vigil")
 PREFS = os.path.join(DATA, "settings.json")
 CLAUDE_SETTINGS = os.path.join(HOME, ".claude", "settings.json")
+CODEX_HOOKS = os.path.join(HOME, ".codex", "hooks.json")
 
 # Which agent events we listen to, and the state each maps to.
 HOOK_MAP = {
@@ -27,6 +28,14 @@ HOOK_MAP = {
 }
 # NOTE: PreToolUse is deliberately absent. It fires on every tool call and adds
 # ~180ms each time for information UserPromptSubmit already gave us.
+
+# Codex exposes the same lifecycle names, plus first-class subagent events.
+# Each subagent gets a separate Vigil row through its agent_id.
+CODEX_HOOK_MAP = {
+    "UserPromptSubmit": "working", "PermissionRequest": "blocked",
+    "Stop": "done", "SessionEnd": "idle",
+    "SubagentStart": "working", "SubagentStop": "done",
+}
 
 MARK = "vigil"          # how we recognise our own hooks to remove them later
 
@@ -68,7 +77,7 @@ def self_command():
         os.path.join(os.path.dirname(__file__), "vigil_widget.py"))]
 
 
-def hook_command(state):
+def hook_command(state, provider="claude"):
     """How Claude Code should invoke the HOOK.
 
     Frozen builds use a separate, Qt-free hook binary. Pointing the hook at the
@@ -92,11 +101,11 @@ def hook_command(state):
         for cand in cands:
             cand = os.path.normpath(cand)
             if os.path.exists(cand):
-                return _quote([cand, state])
-        parts = [sys.executable, "--hook", state]     # fallback, slower
+                return _quote([cand, state, provider])
+        parts = [sys.executable, "--hook", state, provider]  # fallback
     else:
-        parts = [sys.executable, os.path.abspath(
-            os.path.join(os.path.dirname(__file__), "vigil_hook_main.py")), state]
+        parts = [sys.executable, os.path.abspath(os.path.join(
+            os.path.dirname(__file__), "vigil_hook_main.py")), state, provider]
     return _quote(parts)
 
 
@@ -127,7 +136,7 @@ def _backup(path):
     return b
 
 
-def install_hooks():
+def install_claude_hooks():
     """Add Vigil's hooks to Claude Code. Returns (ok, message)."""
     try:
         os.makedirs(os.path.dirname(CLAUDE_SETTINGS), exist_ok=True)
@@ -156,7 +165,7 @@ def install_hooks():
         return False, f"Could not install hooks: {e}"
 
 
-def uninstall_hooks():
+def uninstall_claude_hooks():
     """Remove only Vigil's hooks, leaving anything else alone."""
     try:
         if not os.path.exists(CLAUDE_SETTINGS):
@@ -186,7 +195,7 @@ def uninstall_hooks():
         return False, f"Could not remove hooks: {e}"
 
 
-def hooks_installed():
+def claude_hooks_installed():
     try:
         with open(CLAUDE_SETTINGS, encoding="utf-8") as f:
             return MARK in json.dumps(json.load(f).get("hooks", {})).lower()
@@ -194,6 +203,103 @@ def hooks_installed():
         return False
 
 
+
+def install_codex_hooks():
+    """Add Vigil to the user-level Codex/ChatGPT lifecycle hooks."""
+    try:
+        os.makedirs(os.path.dirname(CODEX_HOOKS), exist_ok=True)
+        cfg = {}
+        if os.path.exists(CODEX_HOOKS):
+            with open(CODEX_HOOKS, encoding="utf-8") as f:
+                cfg = json.load(f)
+        backup = _backup(CODEX_HOOKS)
+
+        hooks = cfg.setdefault("hooks", {})
+        for event, state in CODEX_HOOK_MAP.items():
+            timeout = 50 if event == "PermissionRequest" else (
+                3 if event == "SessionEnd" else 5)
+            entry = {"hooks": [{
+                "type": "command",
+                "command": hook_command(state, "codex"),
+                "timeout": timeout,
+                "statusMessage": "Updating Vigil",
+            }]}
+            others = [e for e in hooks.get(event, [])
+                      if MARK not in json.dumps(e).lower()]
+            hooks[event] = others + [entry]
+
+        cfg.setdefault(
+            "description",
+            "Vigil watches Codex sessions and surfaces actionable requests.",
+        )
+        tmp = CODEX_HOOKS + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(cfg, f, indent=2)
+            f.write("\n")
+        with open(tmp, encoding="utf-8") as f:
+            json.load(f)
+        os.replace(tmp, CODEX_HOOKS)
+        suffix = os.path.basename(backup) if backup else "n/a"
+        return True, (
+            f"Codex hooks installed. Backup: {suffix}. "
+            "Open /hooks in Codex once to review and trust them."
+        )
+    except Exception as e:
+        return False, f"Could not install Codex hooks: {e}"
+
+
+def uninstall_codex_hooks():
+    """Remove only Vigil handlers from Codex, preserving every other hook."""
+    try:
+        if not os.path.exists(CODEX_HOOKS):
+            return True, "No Codex hooks to remove."
+        with open(CODEX_HOOKS, encoding="utf-8") as f:
+            cfg = json.load(f)
+        _backup(CODEX_HOOKS)
+        hooks = cfg.get("hooks", {})
+        removed = 0
+        for event in list(hooks):
+            keep = [e for e in hooks[event]
+                    if MARK not in json.dumps(e).lower()]
+            removed += len(hooks[event]) - len(keep)
+            if keep:
+                hooks[event] = keep
+            else:
+                hooks.pop(event)
+        if not hooks:
+            cfg.pop("hooks", None)
+        tmp = CODEX_HOOKS + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(cfg, f, indent=2)
+            f.write("\n")
+        with open(tmp, encoding="utf-8") as f:
+            json.load(f)
+        os.replace(tmp, CODEX_HOOKS)
+        return True, f"Removed {removed} Vigil Codex hook(s)."
+    except Exception as e:
+        return False, f"Could not remove Codex hooks: {e}"
+
+
+def codex_hooks_installed():
+    try:
+        with open(CODEX_HOOKS, encoding="utf-8") as f:
+            return MARK in json.dumps(json.load(f).get("hooks", {})).lower()
+    except Exception:
+        return False
+
+
+def install_hooks():
+    results = (install_claude_hooks(), install_codex_hooks())
+    return all(ok for ok, _ in results), "\n".join(msg for _, msg in results)
+
+
+def uninstall_hooks():
+    results = (uninstall_claude_hooks(), uninstall_codex_hooks())
+    return all(ok for ok, _ in results), "\n".join(msg for _, msg in results)
+
+
+def hooks_installed():
+    return claude_hooks_installed() or codex_hooks_installed()
 # ---------------------------------------------------------------- autostart
 # Registry Run key on Windows, a LaunchAgent plist on macOS.
 from vigil_platform import (                                     # noqa: E402

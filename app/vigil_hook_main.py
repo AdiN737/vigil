@@ -15,7 +15,9 @@ import vigil_hook
 
 if __name__ == "__main__":
     state = sys.argv[1] if len(sys.argv) > 1 else "idle"
+    provider = sys.argv[2] if len(sys.argv) > 2 else None
     # tolerate being called as "--hook blocked" too
     if state == "--hook":
         state = sys.argv[2] if len(sys.argv) > 2 else "idle"
-    sys.exit(vigil_hook.run(state))
+        provider = sys.argv[3] if len(sys.argv) > 3 else None
+    sys.exit(vigil_hook.run(state, provider))

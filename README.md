@@ -2,7 +2,7 @@
 
 # Vigil
 
-### A dot in the corner of your screen that tells you the moment Claude Code needs you — and lets you answer without leaving what you're doing.
+### A quiet desktop signal for AI coding agents. It opens only when the work needs you.
 
 [![Release](https://img.shields.io/github/v/release/AdiN737/vigil?color=FF8C42&labelColor=12171F&label=release)](https://github.com/AdiN737/vigil/releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/AdiN737/vigil/total?color=3DD68C&labelColor=12171F)](https://github.com/AdiN737/vigil/releases)
@@ -11,6 +11,8 @@
 [![License](https://img.shields.io/badge/license-MIT-6B7583?labelColor=12171F)](LICENSE)
 
 **Free · No account · No telemetry · No network calls**
+
+**Ships today:** Windows + Claude Code. **In source:** the Codex/ChatGPT coding-agent adapter, ready for real-machine validation and the next packaged release.
 
 [**⬇ Download for Windows**](https://github.com/AdiN737/vigil/releases/latest) &nbsp;·&nbsp; [vigilit.app](https://vigilit.app) &nbsp;·&nbsp; [How it works](#how-it-works) &nbsp;·&nbsp; [Why it won't spam you](#why-it-doesnt-spam-you) &nbsp;·&nbsp; [Install](#install)
 
@@ -78,7 +80,7 @@ Seven tiers, copied from `TIERS` in [`app/vigil_widget.py`](app/vigil_widget.py)
 
 ## How it works
 
-Two binaries, a folder of small JSON files, and no server.
+Two binaries, provider adapters, a folder of small JSON files, and no server.
 
 <div align="center">
 <img src="docs/img/architecture.svg" width="880" alt="An agent event travels from Claude Code to the hook binary, which writes a JSON file into the .vigil folder; the widget polls that folder every 300 milliseconds. Your allow or deny answer returns from the widget straight back to the hook, which hands it to the agent.">
@@ -92,7 +94,8 @@ Every design choice below exists because a measurement forced it.
 | **Five hooks, not six** | `PreToolUse` fires on literally every tool call. Dropping it cost nothing in coverage and gave back most of a 7-second-per-turn regression. Total overhead is now **~0.33 s per turn**. |
 | **Files, not a daemon** | One small JSON per session, written with an atomic replace, so a busy agent can never half-overwrite what the widget is reading. No server, no port, nothing to leave running. |
 | **State in `~/.vigil`** | Not a synced folder (phantom sessions from other machines), and not `%LOCALAPPDATA%` (the Microsoft Store build of Python silently sandboxes writes there). |
-| **Fails open, always** | The hook is wrapped end to end. If Vigil breaks, throws, or is missing entirely, Claude Code prompts exactly as it would without it. |
+| **Provider adapters** | Claude Code and Codex lifecycle hooks normalize into the same small session record. The widget does not need provider-specific UI logic. |
+| **Fails open, always** | The hook is wrapped end to end. If Vigil breaks, throws, or is missing entirely, the coding agent prompts exactly as it would without it. |
 
 <br>
 
@@ -216,6 +219,8 @@ python app/vigil_setup.py --install  # register the hooks
 
 Building the distributable uses the `.spec` files with PyInstaller. **The widget and the hook build separately** — that separation is the whole performance story, so don't merge them.
 
+The current source can register both Claude Code and Codex hooks. Codex asks you to review and trust user hooks once through `/hooks`. See [`docs/PROVIDERS.md`](docs/PROVIDERS.md) for the event contract and [`docs/ASTRA_HANDOFF.md`](docs/ASTRA_HANDOFF.md) for the full GPT-6 Astra continuation prompt.
+
 <br>
 
 ## Where this is going
@@ -232,14 +237,15 @@ A screen widget can only reach you while you're looking at a screen. The decisio
 |---|---|
 | The widget — Windows, Claude Code | ✅ **shipping now** |
 | macOS build from the same core | 🔨 source ported, needs building + testing on a Mac |
-| Watching ChatGPT, Gemini, Cursor via a browser extension bridged to the desktop app | 🔨 planned |
+| Codex/ChatGPT coding-agent lifecycle adapter | 🔨 implemented in source; real-machine validation and packaging next |
+| Ordinary ChatGPT web chats, Gemini, Cursor via browser extension + native bridge | 📐 planned |
 | Physical desk device — LED ring, round display, a dial you press to approve | 📐 designed, not built |
 
 <br>
 
 ## Status
 
-**v0.1.1.** Windows only, Claude Code only, not code-signed. It's been stress-tested across simulated eight-hour days, but you'll be among the first real users — [bug reports](https://github.com/AdiN737/vigil/issues) are genuinely useful.
+**v0.1.1 release:** Windows only, Claude Code only, not code-signed. The main branch now contains a provider-neutral event layer and Codex adapter; do not describe that adapter as released until it has been tested against a real Codex permission request and packaged. It's been stress-tested across simulated eight-hour days, but you'll be among the first real users — [bug reports](https://github.com/AdiN737/vigil/issues) are genuinely useful.
 
 <br>
 

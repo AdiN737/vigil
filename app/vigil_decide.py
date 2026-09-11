@@ -43,12 +43,13 @@ def decision_path(rid):
 
 
 # ---------------------------------------------------------------- hook side
-def open_request(rid, session_id, project, tool, detail, tier):
+def open_request(rid, session_id, project, tool, detail, tier,
+                 provider="claude"):
     """Called by the hook. Publishes a pending approval for the UIs to show."""
     _ensure()
     rec = {
         "id": rid, "session_id": session_id, "project": project,
-        "tool": tool, "detail": detail, "tier": tier,
+        "provider": provider, "tool": tool, "detail": detail, "tier": tier,
         "opened": time.time(), "expires": time.time() + WAIT_SECS,
     }
     try:

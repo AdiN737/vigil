@@ -1,8 +1,8 @@
 """
 Vigil desktop widget - multi-session.
 
-A dot in the corner of your screen. When one or more Claude sessions need you,
-it unfurls into a stack of pills - one per session - and folds back to a dot
+A dot in the corner of your screen. When one or more AI agents need you, it
+unfurls into a stack of pills - one per session - and folds back to a dot
 after a few seconds. Click a pill to jump to that session's window.
 
     pip install PySide6-Essentials pywin32
@@ -118,6 +118,7 @@ def read_sessions():
                     r["tier"] = 1
                 r["project"] = str(r.get("project", ""))[:60]
                 r["detail"] = str(r.get("detail", ""))[:200]
+                r["provider"] = str(r.get("provider", "claude"))[:16].lower()
                 _CACHE[f] = (m, r)
             except Exception:
                 _CACHE.pop(f, None)
@@ -504,11 +505,20 @@ class Stack(QWidget):
         if req is None:
             p.setFont(QFont("Segoe UI", 7.5))
             p.setPen(QColor("#5D6675"))
-            p.drawText(QRect(tx, y + 50, tw, 15), Qt.AlignVCenter | align,
-                       "right-click for menu" if s is None else "click to jump there")
+            source = (s or {}).get("provider", "").upper()
+            hint = "right-click for menu" if s is None else f"{source} · click to jump"
+            p.drawText(QRect(tx, y + 50, tw, 15), Qt.AlignVCenter | align, hint)
             return
 
         # ---- Approve / Deny ----
+        source = (s or {}).get("provider", "").upper()
+        if source:
+            p.setFont(QFont("Consolas", 7, QFont.DemiBold))
+            p.setPen(QColor("#6E7887"))
+            sr = (QRect(14, y + h - 35, 48, 22) if self.on_right else
+                  QRect(PILL_W - 62, y + h - 35, 48, 22))
+            p.drawText(sr, Qt.AlignVCenter |
+                       (Qt.AlignLeft if self.on_right else Qt.AlignRight), source)
         danger = s.get("tier") == 7
         ax, dx = self._btn_rects(y, h)
         ok_col = QColor("#3DD68C") if not danger else QColor("#FF7A3D")
@@ -642,7 +652,7 @@ def build_menu(app, stack, parent=None):
     mute.triggered.connect(lambda on: stack.set_muted(on))
     m.addAction(mute)
 
-    auto = QAction("Start with Windows", m); auto.setCheckable(True)
+    auto = QAction("Start at login", m); auto.setCheckable(True)
     auto.setChecked(VS.is_autostart())
     auto.triggered.connect(lambda on: VS.set_autostart(on))
     m.addAction(auto)
@@ -661,10 +671,10 @@ def build_menu(app, stack, parent=None):
 
     m.addSeparator()
     if VS.hooks_installed():
-        u = QAction("Disconnect from Claude Code", m)
+        u = QAction("Disconnect Claude + Codex", m)
         u.triggered.connect(lambda: _msg("Vigil", VS.uninstall_hooks()[1]))
     else:
-        u = QAction("Connect to Claude Code", m)
+        u = QAction("Connect Claude + Codex", m)
         u.triggered.connect(lambda: _msg("Vigil", VS.install_hooks()[1]))
     m.addAction(u)
 
@@ -742,13 +752,14 @@ def claim_single_instance():
 
 
 def main():
-    # --hook runs in Claude's critical path. Handle it before Qt is imported
-    # or the hook would pay ~200ms of Qt startup on every agent event.
+    # --hook runs in the agent's critical path. Handle it before Qt is imported
+    # or it would pay ~200ms of Qt startup on every event.
     if "--hook" in sys.argv:
         i = sys.argv.index("--hook")
         state = sys.argv[i + 1] if len(sys.argv) > i + 1 else "idle"
         import vigil_hook
-        return vigil_hook.run(state)
+        provider = sys.argv[i + 2] if len(sys.argv) > i + 2 else None
+        return vigil_hook.run(state, provider)
 
     import vigil_setup
     if "--install" in sys.argv:

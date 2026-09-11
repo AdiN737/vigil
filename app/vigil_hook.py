@@ -1,5 +1,6 @@
 """
-Vigil hook script. Claude Code runs this on every agent event.
+Vigil's provider-neutral lifecycle hook. Claude Code and Codex run the same
+small binary; this module normalizes both payloads into one session record.
 
 Writes ONE FILE PER SESSION into sessions/, so several Claude Code windows can
 be tracked at once without overwriting each other.
@@ -58,7 +59,7 @@ SAFE = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.-")
 
 
 def read_hook_input():
-    """Claude Code sends a JSON payload on stdin. It may be empty."""
+    """The active agent sends a JSON payload on stdin. It may be empty."""
     try:
         if sys.stdin.isatty():
             return {}
@@ -75,12 +76,52 @@ def describe(payload):
     ti = payload.get("tool_input") or {}
     detail = ""
     if isinstance(ti, dict):
-        detail = str(ti.get("command") or ti.get("file_path")
-                     or ti.get("path") or ti.get("prompt") or "")
+        detail = str(ti.get("command") or ti.get("description")
+                     or ti.get("file_path") or ti.get("path")
+                     or ti.get("prompt") or "")
     if not detail:
         detail = tool
     return project, tool, " ".join(detail.split())[:120], cwd
 
+
+def provider_for(payload, hint=None):
+    """Identify the producer without depending on unstable transcript files."""
+    if hint in ("claude", "codex"):
+        return hint
+    explicit = str(payload.get("vigil_provider") or "").lower()
+    if explicit in ("claude", "codex"):
+        return explicit
+    # Documented Codex hook extensions that Claude hooks do not send.
+    if any(payload.get(k) is not None for k in
+           ("model", "turn_id", "permission_mode", "agent_id")):
+        return "codex"
+    return "claude"
+
+
+def identity_for(payload, provider):
+    """Give Codex subagents their own rows while preserving the native id."""
+    native = str(payload.get("session_id") or payload.get("prompt_id") or "")
+    agent = str(payload.get("agent_id") or "")
+    if provider == "codex":
+        suffix = f":{agent}" if agent else ""
+        return f"codex:{native or 'session'}{suffix}", native
+    return native or provider, native
+
+
+def approval_output(provider, verdict):
+    """Return the provider's documented PermissionRequest response shape."""
+    if provider == "codex":
+        decision = {"behavior": verdict}
+        if verdict == "deny":
+            decision["message"] = "Denied from Vigil"
+        return {"hookSpecificOutput": {
+            "hookEventName": "PermissionRequest", "decision": decision,
+        }}
+    return {"hookSpecificOutput": {
+        "hookEventName": "PermissionRequest",
+        "permissionDecision": verdict,
+        "permissionDecisionReason": f"Answered from Vigil ({verdict})",
+    }}
 
 def tier_for(state, blob):
     low = blob.lower()
@@ -129,14 +170,17 @@ def _user_is_at(project):
     except Exception:
         return False
 
-def main(state=None):
+def main(state=None, provider_hint=None):
     if state is None:
         state = (sys.argv[1] if len(sys.argv) > 1 else "idle").lower()
     payload = read_hook_input()
+    provider = provider_for(payload, provider_hint)
     project, tool, detail, cwd = describe(payload)
     tier, label = tier_for(state, tool + " " + detail)
 
-    sid = payload.get("session_id") or payload.get("prompt_id") or project
+    sid, native_sid = identity_for(payload, provider)
+    if not native_sid:
+        sid = f"{provider}:{project}"
     path = session_file(sid)
 
     event = payload.get("hook_event_name") or ""
@@ -159,7 +203,9 @@ def main(state=None):
         pass
 
     rec = {
-        "session_id": str(sid), "state": state, "label": label, "tier": tier,
+        "schema": 1, "provider": provider,
+        "session_id": str(sid), "native_session_id": native_sid,
+        "state": state, "label": label, "tier": tier,
         "project": project, "cwd": cwd, "tool": tool, "detail": detail,
         "since": since, "updated": time.time(),
         "event": event,
@@ -193,15 +239,12 @@ def main(state=None):
             import vigil_decide as VD
             if not _user_is_at(project):        # they'd just use the terminal
                 rid = f"{sid}-{int(time.time()*1000)}"
-                VD.open_request(rid, str(sid), project, tool, detail, tier)
+                VD.open_request(rid, str(sid), project, tool, detail, tier,
+                                provider)
                 verdict = VD.await_decision(rid)
                 VD.close_request(rid)
                 if verdict in ("allow", "deny"):
-                    print(json.dumps({"hookSpecificOutput": {
-                        "hookEventName": "PermissionRequest",
-                        "permissionDecision": verdict,
-                        "permissionDecisionReason": f"Answered from Vigil ({verdict})",
-                    }}))
+                    print(json.dumps(approval_output(provider, verdict)))
                     return 0
         except Exception:
             pass                                 # never block Claude over this
@@ -214,16 +257,21 @@ def main(state=None):
         except Exception:
             pass
 
+    # Codex requires valid JSON from passive Stop hooks. An empty object means
+    # "observed, no control decision" and avoids a false hook-failed warning.
+    if provider == "codex" and event in ("Stop", "SubagentStop"):
+        print("{}")
     return 0         # ALWAYS succeed
 
 
-def run(state):
+def run(state, provider=None):
     """Entry point when the packaged exe is invoked as a hook."""
     try:
-        return main(state) or 0
+        return main(state, provider) or 0
     except Exception:
         return 0            # a broken hook must never break Claude Code
 
 
 if __name__ == "__main__":
-    sys.exit(run(sys.argv[1] if len(sys.argv) > 1 else "idle"))
+    sys.exit(run(sys.argv[1] if len(sys.argv) > 1 else "idle",
+                 sys.argv[2] if len(sys.argv) > 2 else None))
