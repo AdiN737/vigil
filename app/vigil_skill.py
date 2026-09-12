@@ -79,9 +79,12 @@ try {
         $items = @(Find-Vigil)
     } until ($items.Count -or [DateTime]::UtcNow -gt $deadline)
     if (-not $items.Count) { Report 'failed_to_start' @(); exit 1 }
-    Start-Sleep -Milliseconds 750
+    Start-Sleep -Seconds 5
     $items = @(Find-Vigil)
     if (-not $items.Count) { Report 'exited_during_startup' @(); exit 1 }
+    if (-not @($items | Where-Object { $_.MainWindowTitle -eq 'Vigil' }).Count) {
+        Report 'window_not_ready' $items; exit 1
+    }
     Report 'running' $items
 } catch {
     [pscustomobject]@{ status = 'error'; message = $_.Exception.Message } |

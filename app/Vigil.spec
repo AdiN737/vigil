@@ -15,6 +15,12 @@ a = Analysis(
               'PySide6.QtMultimedia', 'PySide6.QtSql', 'PySide6.QtTest'],
     noarchive=False,
 )
+# Qt uses Windows' ICU API. A third-party icuuc.dll found on PATH can
+# export version-suffixed symbols and break QtCore before the window opens.
+# Leave ICU resolution to Windows, as the unfrozen Qt installation does.
+a.binaries = [entry for entry in a.binaries
+              if entry[0].replace('\\', '/').rsplit('/', 1)[-1].lower()
+              not in ('icuuc.dll', 'icudt78.dll')]
 pyz = PYZ(a.pure)
 exe = EXE(pyz, a.scripts, [], exclude_binaries=True,
           name='Vigil', console=False, icon=None)

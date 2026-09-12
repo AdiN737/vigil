@@ -13,6 +13,17 @@ Reads sessions/*.json written by Code/poc/notify.py.
 """
 import json, os, sys, time, glob, ctypes
 
+# Windowed executables have no stderr. Keep startup failures diagnosable.
+if getattr(sys, "frozen", False):
+    try:
+        _logdir = os.path.join(os.path.expanduser("~"), ".vigil")
+        os.makedirs(_logdir, exist_ok=True)
+        _error_log = open(os.path.join(_logdir, "startup.log"), "a", buffering=1, encoding="utf-8")
+        sys.stderr = _error_log
+        sys.stdout = _error_log
+    except OSError:
+        pass
+
 from PySide6.QtCore import (Qt, QTimer, QPoint, QRect, QPropertyAnimation,
                             QEasingCurve, QSharedMemory)
 from PySide6.QtGui import (QColor, QPainter, QPainterPath, QPen, QFont, QAction,
@@ -232,7 +243,12 @@ class Stack(QWidget):
         try:
             with open(PREFS, encoding="utf-8") as f:
                 p = json.load(f)
-            return QPoint(p["x"], p["y"])
+            point = QPoint(int(p["x"]), int(p["y"]))
+            bounds = QRect(point.x(), point.y(), DOT_W, DOT_H)
+            if not any(screen.availableGeometry().contains(bounds)
+                       for screen in QGuiApplication.screens()):
+                raise ValueError("Saved position is outside the desktop")
+            return point
         except Exception:
             g = QGuiApplication.primaryScreen().availableGeometry()
             return QPoint(g.right() - MARGIN_X - DOT_W, g.bottom() - MARGIN_Y)
