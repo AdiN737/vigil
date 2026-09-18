@@ -8,6 +8,8 @@ a = Analysis(
     binaries=[],
     datas=[],
     hiddenimports=['vigil_hook', 'vigil_setup', 'vigil_decide',
+                   'vigil_version', 'vigil_remote', 'vigil_update',
+                   'cryptography.hazmat.primitives.asymmetric.ed25519',
                    'win32gui', 'win32con'],
     excludes=['tkinter', 'matplotlib', 'numpy', 'PIL', 'pytest',
               'PySide6.QtNetwork', 'PySide6.QtQml', 'PySide6.QtQuick',

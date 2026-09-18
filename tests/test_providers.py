@@ -43,7 +43,8 @@ class ProviderContractTests(unittest.TestCase):
         claude = vigil_hook.approval_output("claude", "allow")
         codex = vigil_hook.approval_output("codex", "deny")
         self.assertEqual(
-            claude["hookSpecificOutput"]["permissionDecision"], "allow"
+            claude["hookSpecificOutput"],
+            {"hookEventName": "PermissionRequest", "decision": {"behavior": "allow"}}
         )
         self.assertEqual(
             codex["hookSpecificOutput"]["decision"],

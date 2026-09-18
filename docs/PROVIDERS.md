@@ -25,7 +25,14 @@ phone/watch clients depend only on this contract.
 ## Shipped adapter: Claude Code
 
 `~/.claude/settings.json` receives five hooks. Claude approval replies use
-`hookSpecificOutput.permissionDecision`.
+`hookSpecificOutput.decision.behavior` (`allow` or `deny`), per the
+[official PermissionRequest contract](https://code.claude.com/docs/en/hooks#permissionrequest-decision-control).
+`permissionDecision` belongs to PreToolUse, not PermissionRequest. This source
+correction does not update the released ZIP. Isolated source-process tests cover
+allow/deny and the 45-second expiry (exit 0, no decision, request cleanup); live
+Claude Code acceptance and rebuilt-binary validation remain outstanding. On
+expiry the agent retains control; a non-interactive session may deny rather than
+show a prompt.
 
 ## Source adapter: Codex / ChatGPT coding agent
 

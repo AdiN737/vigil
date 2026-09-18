@@ -119,8 +119,9 @@ def approval_output(provider, verdict):
         }}
     return {"hookSpecificOutput": {
         "hookEventName": "PermissionRequest",
-        "permissionDecision": verdict,
-        "permissionDecisionReason": f"Answered from Vigil ({verdict})",
+        # PermissionRequest uses decision.behavior; permissionDecision is
+        # a PreToolUse field and cannot answer this event.
+        "decision": {"behavior": verdict},
     }}
 
 def tier_for(state, blob):
@@ -239,7 +240,12 @@ def main(state=None, provider_hint=None):
     if event == "PermissionRequest" and state == "blocked":
         try:
             import vigil_decide as VD
-            if not _user_is_at(project):        # they'd just use the terminal
+            import vigil_remote as VR
+            # Live kill switch, pushed from vigilit.app and cached locally by
+            # the widget. Reading it is a small local file; the hook itself
+            # never touches the network. Off means the agent's own prompt
+            # appears exactly as if Vigil were not installed.
+            if VR.approvals_enabled() and not _user_is_at(project):
                 rid = uuid.uuid4().hex
                 VD.open_request(rid, str(sid), project, tool, detail, tier,
                                 provider)

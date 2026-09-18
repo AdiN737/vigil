@@ -25,7 +25,7 @@ if getattr(sys, "frozen", False):
         pass
 
 from PySide6.QtCore import (Qt, QTimer, QPoint, QRect, QPropertyAnimation,
-                            QEasingCurve, QSharedMemory)
+                            QEasingCurve, QSharedMemory, QObject, Signal)
 from PySide6.QtGui import (QColor, QPainter, QPainterPath, QPen, QFont, QAction,
                            QGuiApplication, QIcon, QPixmap)
 from PySide6.QtWidgets import QApplication, QWidget, QMenu, QSystemTrayIcon
@@ -658,10 +658,74 @@ def _msg(title, text):
     b.setIcon(QMessageBox.Information); b.exec()
 
 
+class Updates(QObject):
+    """Runs update checks and downloads off the UI thread.
+
+    Deliberately NOT the pill. The pill opens only when a human must act on an
+    agent; an update can always wait. Updates and announcements surface in the
+    tray menu, plus one tray notification per version or message.
+    """
+    checked = Signal(object)     # manifest dict, or None
+    staged = Signal(str)         # version now ready to install
+    failed = Signal(str)         # human-readable reason
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.available = None    # manifest of a newer version, if any
+        self.ready = None        # version verified and waiting in app.next
+        self.busy = False
+        self.message = None      # live announcement text, if any
+        self._told = set()       # versions/messages already notified
+
+    def check(self, force=False):
+        import threading
+        import vigil_update as VU
+
+        def run():
+            try:
+                self.checked.emit(VU.check(force=force))
+            except Exception:
+                self.checked.emit(None)
+        threading.Thread(target=run, daemon=True).start()
+
+    def download(self):
+        import threading
+        import vigil_update as VU
+        if self.busy or not self.available:
+            return
+        self.busy = True
+        manifest = self.available
+
+        def run():
+            try:
+                self.staged.emit(VU.stage(manifest))
+            except Exception as e:
+                self.failed.emit(str(e) or "the update could not be downloaded")
+        threading.Thread(target=run, daemon=True).start()
+
+
 def build_menu(app, stack, parent=None):
     """One menu, used by both the tray icon and right-click on the widget."""
     import vigil_setup as VS
+    from vigil_version import VERSION
     m = QMenu(parent)
+
+    up = getattr(stack, "_updates", None)
+    if up is not None:
+        if up.message:
+            note = QAction(up.message, m); note.setEnabled(False)
+            m.addAction(note); m.addSeparator()
+        if up.ready:
+            a = QAction(f"Restart to update to v{up.ready}", m)
+            a.triggered.connect(lambda: _restart_to_update(app))
+            m.addAction(a); m.addSeparator()
+        elif up.available and not up.busy:
+            a = QAction(f"Download update v{up.available['version']}…", m)
+            a.triggered.connect(up.download)
+            m.addAction(a); m.addSeparator()
+        elif up.busy:
+            a = QAction("Downloading update…", m); a.setEnabled(False)
+            m.addAction(a); m.addSeparator()
 
     mute = QAction("Mute pop-ups", m); mute.setCheckable(True)
     mute.setChecked(stack.muted)
@@ -694,9 +758,74 @@ def build_menu(app, stack, parent=None):
         u.triggered.connect(lambda: _msg("Vigil", VS.install_hooks()[1]))
     m.addAction(u)
 
+    m.addSeparator()
+    if up is not None:
+        c = QAction("Check for updates", m)
+        c.triggered.connect(lambda: up.check(force=True))
+        m.addAction(c)
+    v = QAction(f"Vigil v{VERSION}", m); v.setEnabled(False)
+    m.addAction(v)
+
     q = QAction("Quit Vigil", m); q.triggered.connect(app.quit)
     m.addSeparator(); m.addAction(q)
     return m
+
+
+def _restart_to_update(app):
+    import vigil_update as VU
+    if VU.apply():
+        app.quit()          # the swap script waits for us to exit
+
+
+def wire_updates(app, stack, tray):
+    """Connect the updater to the tray. Quiet by default, one notice each."""
+    import vigil_remote as VR
+    import vigil_update as VU
+
+    up = Updates(stack)
+    stack._updates = up
+    up.ready = VU.staged_version()
+    up.message = VR.load()["message"]
+
+    def notify(key, title, text):
+        if key in up._told:
+            return
+        up._told.add(key)
+        try:
+            tray.showMessage(title, text, QSystemTrayIcon.Information, 8000)
+        except Exception:
+            pass
+
+    def on_checked(manifest):
+        up.message = VR.load()["message"]
+        if up.message:
+            notify(("msg", up.message), "Vigil", up.message)
+        if manifest and not up.ready:
+            up.available = manifest
+            notify(("ver", manifest["version"]), f"Vigil v{manifest['version']} is available",
+                   "Right-click the dot or the tray icon to update. Nothing changes until you do.")
+
+    def on_staged(version):
+        up.busy = False
+        up.ready = version
+        up.available = None
+        notify(("ready", version), f"Vigil v{version} is ready",
+               "It installs the next time Vigil starts, or choose Restart to update now.")
+
+    def on_failed(reason):
+        up.busy = False
+        notify(("fail", reason), "Vigil update didn’t install",
+               f"{reason}. Your current version is unchanged.")
+
+    up.checked.connect(on_checked)
+    up.staged.connect(on_staged)
+    up.failed.connect(on_failed)
+
+    if VU.installed():
+        QTimer.singleShot(20_000, up.check)          # not during startup
+        t = QTimer(stack); t.timeout.connect(up.check); t.start(3600_000)
+        stack._update_timer = t                       # keep a reference
+    return up
 
 
 def tray_icon(app, stack):
@@ -791,9 +920,17 @@ def main():
         print("Vigil is already running. Use its tray icon to quit it.")
         return 0
 
+    # An update verified last session installs now: hand off to the swap
+    # script and exit. It relaunches the new version when it is done.
+    import vigil_update as VU
+    if VU.staged_version() and VU.apply():
+        return 0
+    VU.cleanup()
+
     stack = Stack()
     stack.show()
     tray = tray_icon(app, stack)      # noqa: F841  keep a reference alive
+    wire_updates(app, stack, tray)
     if "--demo" in sys.argv:
         start_demo(stack)
     return app.exec()
