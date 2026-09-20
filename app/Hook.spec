@@ -5,7 +5,7 @@ a = Analysis(
     ['vigil_hook_main.py'],
     # vigil_remote reads the cached kill switch; it is json+os only. The updater
     # (network, cryptography) must never end up in here.
-    hiddenimports=['vigil_hook', 'vigil_decide', 'vigil_remote'],
+    hiddenimports=['vigil_hook', 'vigil_decide', 'vigil_remote', 'vigil_metrics'],
     excludes=['PySide6','shiboken6','tkinter','matplotlib','numpy','PIL','pytest',
               'unittest','email','http','xml','pydoc_data','sqlite3','ssl',
               'asyncio','multiprocessing','logging','decimal','pickle','socket',

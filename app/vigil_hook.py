@@ -197,11 +197,24 @@ def main(state=None, provider_hint=None):
 
     # keep the clock running from when this state actually began
     since = time.time()
+    prev = None
     try:
         with open(path, encoding="utf-8") as f:
             prev = json.load(f)
         if prev.get("state") == state and prev.get("since"):
             since = prev["since"]
+    except Exception:
+        pass
+
+    # A session that was waiting on a human and is now moving again: the gap is
+    # agent idle time, the number Vigil exists to shrink. Recorded locally.
+    try:
+        if (prev and int(prev.get("tier", 1)) >= 4 > tier
+                and float(prev.get("since", 0)) > 0):
+            import vigil_metrics as VM
+            VM.record("waited", secs=round(time.time() - float(prev["since"]), 2),
+                      tier=int(prev.get("tier", 1)), sid=str(sid)[:40],
+                      by="terminal")
     except Exception:
         pass
 
@@ -246,13 +259,27 @@ def main(state=None, provider_hint=None):
             # never touches the network. Off means the agent's own prompt
             # appears exactly as if Vigil were not installed.
             if VR.approvals_enabled() and not _user_is_at(project):
+                import vigil_metrics as VM
                 rid = uuid.uuid4().hex
+                asked_at = time.time()
                 VD.open_request(rid, str(sid), project, tool, detail, tier,
                                 provider)
                 try:
                     verdict = VD.await_decision(rid)
                 finally:
                     VD.close_request(rid)
+                took = round(time.time() - asked_at, 2)
+                if verdict in ("allow", "deny"):
+                    # Answered from the widget: this is both the answer time and
+                    # the whole idle gap, since the agent resumes right now.
+                    VM.record("answered", secs=took, verdict=verdict, tier=tier,
+                              sid=str(sid)[:40], away=not _user_is_at(project))
+                    VM.record("waited", secs=took, tier=tier, sid=str(sid)[:40],
+                              by="vigil")
+                else:
+                    # Nobody answered in time. The terminal prompts as always,
+                    # and the agent keeps waiting - worth knowing how often.
+                    VM.record("fellthrough", secs=took, tier=tier, sid=str(sid)[:40])
                 if verdict in ("allow", "deny"):
                     # Resolve the actionable record immediately; no later tool hook
                     # is needed to clear the widget after a decision.

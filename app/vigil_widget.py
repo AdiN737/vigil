@@ -150,6 +150,27 @@ def waiting(sessions):
     return [s for s in sessions if s["tier"] in NEEDS_YOU]
 
 
+def prioritize(sessions, pending):
+    """Order agents that want you, most time-critical first.
+
+    With one agent this changes nothing. With several - the case that gets
+    common fast once someone runs two or three projects - a pending approval
+    beats everything else, because it has a deadline: answer it and that agent
+    resumes now, miss it and the terminal prompts instead. Among approvals the
+    one closest to expiring goes first; after that, the riskiest action, then
+    whoever has been stuck longest.
+    """
+    now = time.time()
+
+    def key(s):
+        req = pending.get(s.get("session_id"))
+        if req:
+            return (0, req.get("expires", now), 0, 0)
+        return (1, 0, -s.get("tier", 1), s.get("since", now))
+
+    return sorted(sessions, key=key)
+
+
 def ago(t):
     s = max(0, int(time.time() - t))
     if s < 60:
@@ -206,6 +227,7 @@ class Stack(QWidget):
         self.phase = 0.0
         self.collapse_at = 0.0
         self.pinged_ids = set()     # sessions we have already pinged for
+        self._quieted = set()       # (reason, session) already counted as quiet
         self.last_ping = 0.0        # for the global cooldown
         self.pending_since = 0.0    # start of the current batching window
         self.ping_log = []          # recent ping times, for burst back-off
@@ -311,6 +333,23 @@ class Stack(QWidget):
             self.setGeometry(r)
 
     # ---------- state
+    def _quiet(self, why, ids):
+        """Count an interruption Vigil chose not to make.
+
+        The poller runs 3x a second, so each session counts once per reason -
+        otherwise "interruptions avoided" would just measure poll frequency.
+        """
+        try:
+            import vigil_metrics as VM
+            for i in ids:
+                key = (why, i)
+                if key in self._quieted:
+                    continue
+                self._quieted.add(key)
+                VM.record("quiet", why=why, sid=str(i)[:40])
+        except Exception:
+            pass
+
     def _cooldown(self):
         """Back off hard when things are busy.
 
@@ -331,6 +370,16 @@ class Stack(QWidget):
         if manual:
             self.collapse_at = 0.0
         else:
+            # How long after the agent asked did the pill actually appear?
+            # This is the latency number the product lives or dies on.
+            try:
+                import vigil_metrics as VM
+                newest = max((s.get("updated", 0) for s in sessions), default=0)
+                if newest:
+                    VM.record("notified", ms=int(max(0, time.time() - newest) * 1000),
+                              pills=len(sessions))
+            except Exception:
+                pass
             # more pills need more reading time
             extra = max(0, min(len(self.shown), MAX_PILLS) - 1)
             self.collapse_at = time.time() + self.ping_secs + extra * PING_PER_EXTRA
@@ -355,7 +404,7 @@ class Stack(QWidget):
     def _poll(self):
         self.sessions = read_sessions()
         self._refresh_pending()
-        need = waiting(self.sessions)
+        need = prioritize(waiting(self.sessions), self.pending)
         now = time.time()
 
         if now < self.greet_until:
@@ -373,20 +422,24 @@ class Stack(QWidget):
 
         ids = {s.get("session_id") for s in need}
         self.pinged_ids &= ids            # a session that resolved can ping again
+        self._quieted = {q for q in self._quieted if q[1] in ids}
         fresh = ids - self.pinged_ids
 
         # ---- anti-spam gauntlet: a ping must survive every one of these ----
         if fresh and not self.expanded:
             if self.muted:
+                self._quiet("muted", fresh)
                 self.pinged_ids |= fresh                  # silence: swallow it
                 fresh = set()
             elif already_looking(need):
                 # You are staring at the window that wants you. Telling you
                 # about it is noise, so treat it as already delivered.
+                self._quiet("looking", fresh)
                 self.pinged_ids |= fresh
                 fresh = set()
             elif (now - self.last_ping < self._cooldown()
                   and not any(s["tier"] in ALWAYS_PING for s in need)):
+                self._quiet("rate_limited", fresh)
                 # Rate-limited. The one exception is a destructive action -
                 # something about to force-push or rm -rf always gets through,
                 # because being quiet there is worse than being annoying.
@@ -658,6 +711,115 @@ def _msg(title, text):
     b.setIcon(QMessageBox.Information); b.exec()
 
 
+# ---------------------------------------------------------------- stats
+_STATS_CSS = """
+#card { background: #12161D; }
+QLabel { color: #E7ECF3; font-family: 'Segoe UI'; }
+#eyebrow { color: #8D97A6; font-size: 11px; letter-spacing: 2px; }
+#hero { color: #FF8C42; font-size: 44px; font-weight: 600; }
+#herolabel { color: #B9C2CF; font-size: 13px; }
+#k { color: #8D97A6; font-size: 13px; }
+#v { color: #E7ECF3; font-size: 13px; font-weight: 600; }
+#foot { color: #6E7887; font-size: 11px; }
+QPushButton { background: #1B212B; color: #B9C2CF; border: 0; border-radius: 6px;
+              padding: 5px 12px; font-size: 12px; }
+QPushButton:checked { background: #FF8C42; color: #0E1116; font-weight: 600; }
+"""
+
+
+class Stats(QWidget):
+    """The honest version of "Vigil saves you time": measured, not claimed.
+
+    Deliberately a separate window, opened from the menu. It is never allowed
+    to interrupt - the pill is reserved for an agent that needs a human.
+    """
+
+    def __init__(self, days=7):
+        super().__init__()
+        from PySide6.QtWidgets import (QVBoxLayout, QHBoxLayout, QLabel,
+                                       QPushButton, QGridLayout, QFrame)
+        self.setWindowTitle("Vigil — what it did")
+        self.setStyleSheet(_STATS_CSS)
+        self.resize(430, 420)
+
+        card = QFrame(self); card.setObjectName("card")
+        outer = QVBoxLayout(self); outer.setContentsMargins(0, 0, 0, 0)
+        outer.addWidget(card)
+        box = QVBoxLayout(card); box.setContentsMargins(26, 24, 26, 20); box.setSpacing(4)
+
+        eyebrow = QLabel("MEASURED ON THIS COMPUTER"); eyebrow.setObjectName("eyebrow")
+        box.addWidget(eyebrow)
+
+        self.hero = QLabel("—"); self.hero.setObjectName("hero")
+        box.addWidget(self.hero)
+        self.herolabel = QLabel(""); self.herolabel.setObjectName("herolabel")
+        self.herolabel.setWordWrap(True)
+        box.addWidget(self.herolabel)
+        box.addSpacing(18)
+
+        self.grid = QGridLayout(); self.grid.setHorizontalSpacing(16)
+        self.grid.setVerticalSpacing(9); self.grid.setColumnStretch(0, 1)
+        box.addLayout(self.grid)
+        box.addStretch(1)
+
+        row = QHBoxLayout(); row.setSpacing(8)
+        self.buttons = {}
+        for label, d in (("7 days", 7), ("30 days", 30), ("All time", 3650)):
+            b = QPushButton(label); b.setCheckable(True)
+            b.clicked.connect(lambda _, v=d: self.show_days(v))
+            row.addWidget(b); self.buttons[d] = b
+        row.addStretch(1)
+        box.addLayout(row)
+
+        foot = QLabel("Nothing on this screen has ever left your computer.")
+        foot.setObjectName("foot")
+        box.addWidget(foot)
+
+        self.show_days(days)
+
+    def show_days(self, days):
+        from PySide6.QtWidgets import QLabel
+        import vigil_metrics as VM
+        for d, b in self.buttons.items():
+            b.setChecked(d == days)
+
+        s = VM.summary(days)
+        self.hero.setText(VM.human_secs(s["idle_secs"]) if s["blocks"] else "—")
+        self.herolabel.setText(
+            f"your agents spent waiting on you, across {s['blocks']} "
+            f"{'pause' if s['blocks'] == 1 else 'pauses'}. Vigil's job is to make "
+            "this number smaller."
+            if s["blocks"] else
+            "No agent has waited on you yet in this window. Vigil records what "
+            "happens as you work; check back after a session or two.")
+
+        pct = "—" if s["coverage"] is None else f"{round(s['coverage'] * 100)}%"
+        rows = [
+            ("Approvals answered here", f"{s['answered']} of {s['asked']}  ({pct})"),
+            ("…without opening the terminal", str(s["answered_away"])),
+            ("How fast you answered", f"{VM.human_secs(s['answer_p50'])} typical"
+                                      f" · {VM.human_secs(s['answer_p95'])} slowest"),
+            ("Pill appeared after", f"{s['notify_p50_ms'] or '—'} ms"),
+            ("Interruptions avoided", str(s["quiet"])),
+            ("Sessions seen", str(s["sessions"])),
+        ]
+        while self.grid.count():
+            self.grid.takeAt(0).widget().deleteLater()
+        for i, (k, v) in enumerate(rows):
+            kl = QLabel(k); kl.setObjectName("k")
+            vl = QLabel(v); vl.setObjectName("v")
+            self.grid.addWidget(kl, i, 0)
+            self.grid.addWidget(vl, i, 1)
+
+
+def show_stats(stack):
+    w = getattr(stack, "_stats", None)
+    if w is None:
+        w = Stats(); stack._stats = w          # keep a reference or Qt frees it
+    w.show_days(7)
+    w.show(); w.raise_(); w.activateWindow()
+
+
 class Updates(QObject):
     """Runs update checks and downloads off the UI thread.
 
@@ -726,6 +888,11 @@ def build_menu(app, stack, parent=None):
         elif up.busy:
             a = QAction("Downloading update…", m); a.setEnabled(False)
             m.addAction(a); m.addSeparator()
+
+    st = QAction("What Vigil did…", m)
+    st.triggered.connect(lambda: show_stats(stack))
+    m.addAction(st)
+    m.addSeparator()
 
     mute = QAction("Mute pop-ups", m); mute.setCheckable(True)
     mute.setChecked(stack.muted)
@@ -828,6 +995,42 @@ def wire_updates(app, stack, tray):
     return up
 
 
+def wire_health(stack, tray):
+    """Say something if Vigil has quietly stopped being connected.
+
+    The worst failure for this product is silence that looks like calm: an
+    agent asks, nothing appears, and you only notice much later. An update, a
+    settings edit, or a re-installed agent can all drop the hooks. So we check,
+    and if they are gone we say so once - in the tray, never the pill.
+    """
+    import vigil_setup as VS
+    warned = set()
+
+    def check():
+        try:
+            ok = VS.hooks_installed()
+        except Exception:
+            return
+        if ok:
+            warned.discard("hooks")
+            return
+        if "hooks" in warned:
+            return
+        warned.add("hooks")
+        try:
+            tray.showMessage(
+                "Vigil isn’t connected to your agents",
+                "Nothing will appear when Claude Code or Codex needs you. "
+                "Right-click the tray icon and choose Connect Claude + Codex.",
+                QSystemTrayIcon.Warning, 10000)
+        except Exception:
+            pass
+
+    QTimer.singleShot(8_000, check)
+    t = QTimer(stack); t.timeout.connect(check); t.start(1800_000)   # every 30 min
+    stack._health_timer = t
+
+
 def tray_icon(app, stack):
     pm = QPixmap(32, 32); pm.fill(Qt.transparent)
     p = QPainter(pm); p.setRenderHint(QPainter.Antialiasing)
@@ -915,6 +1118,12 @@ def main():
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
 
+    # Open the numbers on their own, even while Vigil is already running.
+    if "--stats" in sys.argv:
+        app.setQuitOnLastWindowClosed(True)
+        w = Stats(); w.show()
+        return app.exec()
+
     global _LOCK
     if not claim_single_instance():
         print("Vigil is already running. Use its tray icon to quit it.")
@@ -931,6 +1140,7 @@ def main():
     stack.show()
     tray = tray_icon(app, stack)      # noqa: F841  keep a reference alive
     wire_updates(app, stack, tray)
+    wire_health(stack, tray)
     if "--demo" in sys.argv:
         start_demo(stack)
     return app.exec()
