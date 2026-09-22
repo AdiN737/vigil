@@ -27,6 +27,19 @@ A question in ordinary assistant text is not parsed as a permission request.
 Ordinary chatgpt.com chats and remote/cloud sessions are outside this local hook
 integration. Desktop/CLI coverage depends on that runtime emitting the hooks.
 
+## Codex inside VS Code / JetBrains
+
+**Not supported yet, and not because of Vigil.** The Codex IDE extension shares
+`~/.codex/config.toml` with the CLI but does not currently run the hooks in
+`~/.codex/hooks.json`, so nothing reaches Vigil from a session started inside
+the editor. Tracked upstream in
+[openai/codex#17930](https://github.com/openai/codex/issues/17930) and
+[openai/codex#18090](https://github.com/openai/codex/issues/18090).
+
+Until that lands, run `codex` in a terminal — VS Code's built-in terminal is
+fine — and Vigil sees it. Nothing needs to change on Vigil's side when the
+extension starts firing hooks; the same `hooks.json` entries apply.
+
 ## Verification completed
 
 - Source provider regression suite.
