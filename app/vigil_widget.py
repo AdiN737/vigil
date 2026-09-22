@@ -261,19 +261,25 @@ class Stack(QWidget):
     def _screen(self):
         return QGuiApplication.screenAt(self.pos()) or QGuiApplication.primaryScreen()
 
+    def _default_corner(self):
+        g = QGuiApplication.primaryScreen().availableGeometry()
+        return QPoint(g.right() - MARGIN_X - DOT_W, g.bottom() - MARGIN_Y)
+
+    def _on_a_screen(self, point):
+        bounds = QRect(point.x(), point.y(), DOT_W, DOT_H)
+        return any(s.availableGeometry().contains(bounds)
+                   for s in QGuiApplication.screens())
+
     def _load_corner(self):
         try:
             with open(PREFS, encoding="utf-8") as f:
                 p = json.load(f)
             point = QPoint(int(p["x"]), int(p["y"]))
-            bounds = QRect(point.x(), point.y(), DOT_W, DOT_H)
-            if not any(screen.availableGeometry().contains(bounds)
-                       for screen in QGuiApplication.screens()):
+            if not self._on_a_screen(point):
                 raise ValueError("Saved position is outside the desktop")
             return point
         except Exception:
-            g = QGuiApplication.primaryScreen().availableGeometry()
-            return QPoint(g.right() - MARGIN_X - DOT_W, g.bottom() - MARGIN_Y)
+            return self._default_corner()
 
     def _save_corner(self):
         try:
@@ -312,6 +318,15 @@ class Stack(QWidget):
 
     def _place(self, animate=True):
         """The dot never moves. The stack unfurls from it, away from the edge."""
+        # Unless the screen moved out from under it. Undock a laptop, change
+        # resolution, or carry a position over from an older layout and the
+        # corner can end up somewhere no monitor covers - an invisible Vigil
+        # that looks exactly like a broken one. Checked on every placement,
+        # not just at startup, because monitors come and go while it runs.
+        if not self._on_a_screen(self.corner):
+            self.corner = self._default_corner()
+            self._save_corner()
+
         scr = self._screen().availableGeometry()
         self.on_right = (self.corner.x() + DOT_W // 2) > scr.center().x()
         w, h = self._size()

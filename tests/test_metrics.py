@@ -121,5 +121,53 @@ class PriorityTests(unittest.TestCase):
         self.assertEqual(VW.prioritize(s, {}), s)
 
 
+
+class PlacementTests(unittest.TestCase):
+    """A dot nobody can see is indistinguishable from a broken Vigil.
+
+    Undocking a laptop, changing resolution, or carrying a position over from
+    an older layout used to leave the widget parked outside every monitor.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+        from PySide6.QtWidgets import QApplication
+        cls.app = QApplication.instance() or QApplication([])
+
+    def setUp(self):
+        # VW.PREFS is a fixed path in the real home directory, and _place may
+        # save a corrected corner. A test must never move the user's dot.
+        self.td = tempfile.TemporaryDirectory()
+        self._prefs, VW.PREFS = VW.PREFS, os.path.join(self.td.name, "widget.json")
+
+    def tearDown(self):
+        VW.PREFS = self._prefs
+        self.td.cleanup()
+
+    def test_a_corner_outside_every_screen_is_brought_back(self):
+        from PySide6.QtCore import QPoint
+        stack = VW.Stack()
+        try:
+            stack.corner = QPoint(-14, -17)          # the real-world failure
+            stack._place(animate=False)
+            self.assertTrue(stack._on_a_screen(stack.corner))
+            geo = stack.geometry()
+            self.assertGreaterEqual(geo.left(), 0)
+            self.assertGreaterEqual(geo.top(), 0)
+        finally:
+            stack.close()
+
+    def test_a_valid_corner_is_left_alone(self):
+        from PySide6.QtCore import QPoint
+        stack = VW.Stack()
+        try:
+            good = stack._default_corner()
+            stack.corner = QPoint(good)
+            stack._place(animate=False)
+            self.assertEqual(stack.corner, good)
+        finally:
+            stack.close()
+
 if __name__ == "__main__":
     unittest.main()
