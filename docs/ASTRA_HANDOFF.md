@@ -68,7 +68,10 @@ Product rules:
 - Notify only when a human action is needed. Working, done, and idle may change
   color but must not open the pill.
 - Destructive actions always bypass notification cooldowns.
-- Keep everything local; no account, telemetry, or network service.
+- Keep session data local; no telemetry ever. The only network traffic is the
+  daily update check and a user-initiated update download, both from the
+  widget and never from the hook. An account is required to download a build
+  from vigilit.app, never to run one.
 - Never invent test numbers, testimonials, download counts, or compatibility.
 - Keep the landing page visually restrained, product-led, and fast. Animation
   must explain causality rather than decorate the page.

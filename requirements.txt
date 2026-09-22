@@ -5,5 +5,9 @@ PySide6>=6.6
 # outright on macOS and Linux instead of just skipping this line.
 pywin32>=306; sys_platform == "win32"
 
+# Verifies the Ed25519 signature on an update before it is installed, and
+# signs releases in tools/. The widget imports it; the hook never does.
+cryptography>=42.0
+
 # Build only — not needed to run from source.
 # pyinstaller>=6.0

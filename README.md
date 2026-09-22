@@ -10,7 +10,7 @@
 [![macOS](https://img.shields.io/badge/macOS-run%20from%20source-6B7583?labelColor=12171F)](#macos)
 [![License](https://img.shields.io/badge/license-MIT-6B7583?labelColor=12171F)](LICENSE)
 
-**Free · No account · No telemetry · No network calls**
+**Free · No telemetry · Your sessions never leave your computer**
 
 **Public release:** Windows + Claude Code. **Codex preview:** implemented and tested through compiled hook processes; local activation requires a one-time hook review. See [Codex setup and verification](docs/CODEX.md).
 
@@ -181,12 +181,13 @@ You're about to run an unsigned binary that watches your coding agent. That dese
 
 | | |
 |---|---|
-| **Reads** | The folder name of the project · which tool the agent is about to use · the command or file path it's running (first 120 characters) |
+| **Reads** | The folder name of the project · which tool the agent is about to use · the command or file path it's running (first 120 characters, with anything key-shaped redacted) |
 | **Never reads** | Your prompts · the agent's replies · the contents of any file in your project |
-| **Sends** | Nothing. There are no network calls in the build. No account, no sign-in, no telemetry, no crash reports. |
+| **Sends** | Its own version number, about once a day, to check for updates — and the update itself if you click to install it. Nothing else: no telemetry, no session data, no crash reports. Block `vigilit.app` and Vigil keeps working. |
+| **Stores** | Session state, timings and its own log under `~/.vigil`, on your machine only |
 | **Needs** | No administrator rights · no Python · no config files to edit |
 
-The exact function that decides this is [`describe()` in `app/vigil_hook.py`](app/vigil_hook.py) — it's about fifteen lines, and it's worth reading before you trust any of the above.
+The exact function that decides what gets written is [`describe()` in `app/vigil_hook.py`](app/vigil_hook.py) — it's about twenty lines, and it's worth reading before you trust any of the above. [`docs/SECURITY.md`](docs/SECURITY.md) has the full picture, including the one place the trust boundary stops: anything already running as your user can answer an approval, because the channel is a file in your home folder.
 
 <br>
 

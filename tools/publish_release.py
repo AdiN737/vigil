@@ -95,7 +95,21 @@ def sign(digest):
 
     if not KEY_PATH.exists():
         sys.exit(f"Signing key not found at {KEY_PATH}. Restore it from your backup.")
-    key = serialization.load_pem_private_key(KEY_PATH.read_bytes(), password=None)
+    pem = KEY_PATH.read_bytes()
+    # An encrypted key is the norm; an old unencrypted one still works, with
+    # a nudge, so nobody is locked out of publishing by this change.
+    encrypted = b"ENCRYPTED" in pem[:200]
+    if not encrypted:
+        print("Note: your signing key is stored unencrypted. Add a passphrase "
+              "with: python tools/release_keygen.py --encrypt")
+    try:
+        key = serialization.load_pem_private_key(
+            pem,
+            password=(getpass.getpass("Signing key passphrase: ").encode()
+                      if encrypted else None))
+    except Exception:
+        sys.exit("That passphrase did not open the signing key. "
+                 "Nothing was uploaded.")
     if not isinstance(key, Ed25519PrivateKey):
         sys.exit("The signing key is not an Ed25519 key.")
 

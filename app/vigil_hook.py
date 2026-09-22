@@ -69,7 +69,40 @@ def read_hook_input():
         return {}
 
 
+def scrub(text):
+    """Drop anything that looks like a credential before it is written down.
+
+    The pill shows the command an agent wants to run, and a command can carry
+    a token: `curl -H "Authorization: Bearer sk-..."`. You need to recognise
+    the command, not the key, so long opaque words are replaced.
+
+    Deliberately no `re` - importing it costs ~15ms on the hook's hot path.
+    """
+    out = []
+    for word in text.split():
+        bare = word.strip("\"'`,;()[]{}")
+        if len(bare) >= 20:
+            core = bare.split("=")[-1].split(":")[-1]
+            if len(core) >= 20 and not any(c in core for c in "/\\"):
+                has_digit = any(c.isdigit() for c in core)
+                has_alpha = any(c.isalpha() for c in core)
+                # A commit sha is all hex and worth reading; a key is not.
+                is_sha = all(c in "0123456789abcdef" for c in core.lower())
+                if has_digit and has_alpha and not is_sha:
+                    out.append(word.replace(core, "[redacted]"))
+                    continue
+        out.append(word)
+    return " ".join(out)
+
+
 def describe(payload):
+    """What to show on the pill: the project, the tool, and a short detail.
+
+    The detail comes from the tool's own input - a command, a path, the
+    agent's description of what it is doing. It deliberately does NOT come
+    from `prompt`: what you type to your agent is yours, and Vigil never
+    writes it down. See docs/SECURITY.md.
+    """
     cwd = payload.get("cwd") or os.getcwd()
     project = os.path.basename(str(cwd).rstrip("\\/")) or "session"
     tool = payload.get("tool_name") or ""
@@ -77,11 +110,10 @@ def describe(payload):
     detail = ""
     if isinstance(ti, dict):
         detail = str(ti.get("command") or ti.get("description")
-                     or ti.get("file_path") or ti.get("path")
-                     or ti.get("prompt") or "")
+                     or ti.get("file_path") or ti.get("path") or "")
     if not detail:
         detail = tool
-    return project, tool, " ".join(detail.split())[:120], cwd
+    return project, tool, scrub(" ".join(detail.split()))[:120], cwd
 
 
 def provider_for(payload, hint=None):
