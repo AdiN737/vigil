@@ -127,12 +127,21 @@ def decide(rid, decision, source="widget"):
     _ensure()
     if decision not in ("allow", "deny"):
         return False
+    # A stale UI must never create a decision after its hook stopped waiting.
+    if not isinstance(rid, str) or not rid or any(c not in
+            "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-" for c in rid):
+        return False
     try:
-        tmp = decision_path(rid) + ".tmp"
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump({"id": rid, "decision": decision,
-                       "source": source, "at": time.time()}, f)
-        os.replace(tmp, decision_path(rid))
+        with open(request_path(rid), encoding="utf-8") as f:
+            request = json.load(f)
+        now = time.time()
+        if not isinstance(request, dict) or request.get("id") != rid or float(request.get("expires", 0)) <= now:
+            return False
+        # Exclusive creation makes competing clicks first-writer-wins. The
+        # reader retries incomplete JSON, so it never consumes a partial write.
+        with open(decision_path(rid), "x", encoding="utf-8") as f:
+            json.dump({"id": rid, "session_id": request.get("session_id"),
+                       "decision": decision, "source": source, "at": now}, f)
         return True
-    except Exception:
+    except (OSError, ValueError, TypeError):
         return False

@@ -44,7 +44,7 @@ def _data_dir():
     # writes there into a hidden per-package sandbox, so notify.py and the
     # widget would silently look in different folders the moment either one
     # runs under a different Python. The home directory is not virtualized.
-    d = os.path.join(os.path.expanduser("~"), ".vigil")
+    d = os.environ.get("VIGIL_DATA_DIR") or os.path.join(os.path.expanduser("~"), ".vigil")
     try:
         os.makedirs(d, exist_ok=True)
     except Exception:
@@ -191,21 +191,31 @@ from vigil_platform import (                                     # noqa: E402
 )
 
 
-def already_looking(sessions):
-    """True if the foreground window belongs to a session that wants attention.
+def already_looking(sessions, all_sessions=None):
+    """Suppress only a uniquely identifiable foreground session.
 
-    If you are staring at the terminal that just asked you something, a pill
-    telling you about it is pure noise. This is the single most effective
-    anti-spam rule we have.
+    A shared project title (or shared path) cannot tell us which agent the
+    user is watching. Include working agents when checking that ambiguity.
     """
-    fg = foreground_title()
+    fg = (foreground_title() or "").lower().replace("\\", "/")
     if not fg:
         return False
-    for s in sessions:
-        proj = (s.get("project") or "").lower()
-        if proj and len(proj) > 2 and proj in fg:
-            return True
-    return False
+    live = sessions if all_sessions is None else all_sessions
+    exact, paths, names = [], [], []
+    for session in live:
+        identities = (session.get("session_id"), session.get("native_session_id"))
+        if any(len(str(value or "")) > 2 and str(value).lower() in fg
+               for value in identities):
+            exact.append(session)
+        cwd = str(session.get("cwd") or "").lower().replace("\\", "/").rstrip("/")
+        if cwd and cwd in fg:
+            paths.append(session)
+        project = (session.get("project") or "").lower()
+        if len(project) > 2 and project in fg:
+            names.append(session)
+    matches = exact or paths or names
+    return (len(matches) == 1 and
+            any(s.get("session_id") == matches[0].get("session_id") for s in sessions))
 
 
 # ---------------------------------------------------------------- widget
@@ -259,7 +269,17 @@ class Stack(QWidget):
 
     # ---------- geometry
     def _screen(self):
-        return QGuiApplication.screenAt(self.pos()) or QGuiApplication.primaryScreen()
+        # The anchor is the destination; self.pos() can still be on the old
+        # monitor during startup, dragging, or an expansion animation.
+        point = self.corner + QPoint(DOT_W // 2, DOT_H // 2)
+        screen = QGuiApplication.screenAt(point)
+        if screen:
+            return screen
+        def distance(screen):
+            r = screen.availableGeometry()
+            return max(r.left() - point.x(), 0, point.x() - r.right()) + max(
+                r.top() - point.y(), 0, point.y() - r.bottom())
+        return min(QGuiApplication.screens(), key=distance)
 
     def _default_corner(self):
         g = QGuiApplication.primaryScreen().availableGeometry()
@@ -323,7 +343,7 @@ class Stack(QWidget):
         # corner can end up somewhere no monitor covers - an invisible Vigil
         # that looks exactly like a broken one. Checked on every placement,
         # not just at startup, because monitors come and go while it runs.
-        if not self._on_a_screen(self.corner):
+        if self.drag is None and not self._on_a_screen(self.corner):
             self.corner = self._default_corner()
             self._save_corner()
 
@@ -380,9 +400,14 @@ class Stack(QWidget):
 
     def _open(self, sessions, manual=False):
         self.shown = list(sessions)
+        self.rows, _ = self._layout()
+        self._update_session_tooltip()
         self.expanded = True
         self.manual = manual
         if manual:
+            self.greet_until = 0.0
+            self._mark_visible_seen()
+            self.pending_since = 0.0
             self.collapse_at = 0.0
         else:
             # How long after the agent asked did the pill actually appear?
@@ -405,6 +430,7 @@ class Stack(QWidget):
     def _close(self):
         self.expanded = False
         self.manual = False
+        self._selected_session = None
         self.collapse_at = 0.0
         self._place()
 
@@ -416,11 +442,40 @@ class Stack(QWidget):
         except Exception:
             self.pending = {}
 
+    def _mark_visible_seen(self):
+        """Overflow requests remain eligible until their pill is visible."""
+        self.pinged_ids |= {s.get("session_id") for _, _, s, _ in self.rows
+                            if s["tier"] in NEEDS_YOU}
+
+    def _sync_shown(self, sessions):
+        """Refresh both painted and clickable rows, including approval heights."""
+        self.shown = list(sessions)
+        self.rows, _ = self._layout()
+        self._update_session_tooltip()
+        if (self.width(), self.height()) != self._size():
+            self.anim.stop()
+            self._place(animate=False)
+
     def _poll(self):
         self.sessions = read_sessions()
         self._refresh_pending()
         need = prioritize(waiting(self.sessions), self.pending)
         now = time.time()
+        ids = {s.get("session_id") for s in need}
+        self.pinged_ids &= ids
+        self._quieted = {q for q in self._quieted if q[1] in ids}
+
+        if self.manual:
+            sessions = prioritize(self.sessions, self.pending)
+            selected = getattr(self, "_selected_session", None)
+            if selected is not None:
+                sessions.sort(key=lambda s: s.get("session_id") != selected)
+            self._sync_shown(sessions)
+            # Only painted requests have been seen; overflow can still notify.
+            self._mark_visible_seen()
+            self.pending_since = 0.0
+            self.update()
+            return
 
         if now < self.greet_until:
             if not self.expanded:
@@ -430,56 +485,42 @@ class Stack(QWidget):
             self.update()
             return
 
-        if self.manual:                       # user opened it; their call to close
-            self.shown = need or self.sessions[:1]
-            self.update()
-            return
-
-        ids = {s.get("session_id") for s in need}
-        self.pinged_ids &= ids            # a session that resolved can ping again
-        self._quieted = {q for q in self._quieted if q[1] in ids}
         fresh = ids - self.pinged_ids
-
-        # ---- anti-spam gauntlet: a ping must survive every one of these ----
-        if fresh and not self.expanded:
-            if self.muted:
-                self._quiet("muted", fresh)
-                self.pinged_ids |= fresh                  # silence: swallow it
-                fresh = set()
-            elif already_looking(need):
-                # You are staring at the window that wants you. Telling you
-                # about it is noise, so treat it as already delivered.
-                self._quiet("looking", fresh)
-                self.pinged_ids |= fresh
-                fresh = set()
-            elif (now - self.last_ping < self._cooldown()
-                  and not any(s["tier"] in ALWAYS_PING for s in need)):
-                self._quiet("rate_limited", fresh)
-                # Rate-limited. The one exception is a destructive action -
-                # something about to force-push or rm -rf always gets through,
-                # because being quiet there is worse than being annoying.
-                fresh = set()
-            elif not self.pending_since:
-                self.pending_since = now
-                fresh = set()          # open a batch window
-            elif (now - self.pending_since) * 1000 < BATCH_MS:
-                fresh = set()          # still collecting simultaneous blocks
-            else:
-                self.pending_since = 0.0       # batch closed - one ping for all
+        looking = {s.get("session_id") for s in need
+                   if s.get("session_id") in fresh and already_looking([s], self.sessions)}
+        self._quiet("looking", looking)
+        self.pinged_ids |= looking
+        fresh -= looking
+        if self.muted:
+            self._quiet("muted", fresh)
+            self.pinged_ids |= fresh
+            fresh = set()
+        candidates = [s for s in need if s.get("session_id") in fresh]
+        if not fresh:
+            self.pending_since = 0.0
+        elif (now - self.last_ping < self._cooldown()
+              and not any(s["tier"] in ALWAYS_PING for s in candidates)):
+            self._quiet("rate_limited", fresh)
+            fresh = set()
+        elif not self.pending_since:
+            self.pending_since = now
+            fresh = set()
+        elif (now - self.pending_since) * 1000 < BATCH_MS:
+            fresh = set()
+        else:
+            self.pending_since = 0.0
 
         if fresh:
+            # Keep visible requests, without replaying old or focused projects.
+            visible = {s.get("session_id") for s in self.shown} if self.expanded else set()
             self.pinged_ids |= fresh
-            self._open(need)
-        elif self.expanded and need:
-            self.shown = need                 # keep contents live while open
-            # NB: do not name this "waiting" - it would shadow the module-level
-            # waiting() function for the whole method and break _poll entirely.
+            self._open([s for s in need if s.get("session_id") in visible | fresh])
+        elif self.expanded:
+            visible = {s.get("session_id") for s in self.shown}
+            self._sync_shown([s for s in need if s.get("session_id") in visible])
             still_open = any(s.get("session_id") in self.pending for s in self.shown)
-            if self.collapse_at and now > self.collapse_at and not still_open:
-                self._close()      # never hide a prompt that is still waiting
-        elif self.expanded and not need:
-            self._close()
-
+            if not self.shown or (self.collapse_at and now > self.collapse_at and not still_open):
+                self._close()
         self.update()
 
     def _frame(self):
@@ -526,7 +567,7 @@ class Stack(QWidget):
             p.drawText(QRect(cx + 1, cy - 15, 14, 14), Qt.AlignCenter, str(n))
 
     def _paint_stack(self, p):
-        if time.time() < self.greet_until:
+        if time.time() < self.greet_until or not self.shown:
             self._paint_pill(p, 0, None, "Vigil is watching",
                              "nothing needs you right now", "",
                              TIERS[1]["color"], 0.0)
@@ -535,7 +576,7 @@ class Stack(QWidget):
         for y, h, s, req in self.rows:
             t = TIERS[s["tier"]]
             self._paint_pill(p, y, s,
-                             s.get("project") or "session",
+                             self._session_title(s),
                              s.get("detail") or t["name"],
                              ago(s.get("since", time.time())),
                              t["color"], t["pulse"], h, req)
@@ -543,8 +584,8 @@ class Stack(QWidget):
         if extra:
             p.setFont(QFont("Segoe UI", 8))
             p.setPen(QColor("#6E7887"))
-            p.drawText(QRect(0, n * (PILL_H + GAP), PILL_W, 20), Qt.AlignCenter,
-                       f"+{len(self.shown) - n} more waiting")
+            p.drawText(self._overflow_rect(), Qt.AlignCenter,
+                       f"+{len(self.shown) - n} more · choose session")
 
     def _paint_pill(self, p, y, s, title, detail, timer, colhex, pulse,
                     h=PILL_H, req=None):
@@ -635,6 +676,7 @@ class Stack(QWidget):
     # ---------- interaction
     def mousePressEvent(self, e):
         if e.button() == Qt.LeftButton:
+            self.anim.stop()
             self.drag = e.globalPosition().toPoint()
             self._moved = False
             self._hit_y = int(e.position().y())
@@ -656,10 +698,22 @@ class Stack(QWidget):
         if self.drag is None:
             return
         if self._moved:
-            self._save_corner()
+            # While crossing a monitor gap, keep the logical drag anchor so
+            # motion does not jump back to the primary display. Clamp only
+            # on release, making the saved dot fully visible on its monitor.
+            r = self._screen().availableGeometry()
+            self.corner = QPoint(
+                max(r.left(), min(self.corner.x(), r.right() - DOT_W + 1)),
+                max(r.top(), min(self.corner.y(), r.bottom() - DOT_H + 1)))
             self.drag = None
+            self._place(animate=False)
+            self._save_corner()
             return
         if self.expanded:
+            if self._overflow_rect().contains(QPoint(self._hit_x, self._hit_y)):
+                self.drag = None
+                self._show_session_chooser()
+                return
             # A button click answers the prompt. Anything else jumps to the window.
             for y, h, sess, req in self.rows:
                 if not (y <= self._hit_y < y + h):
@@ -674,9 +728,48 @@ class Stack(QWidget):
                 break
             self._close()
         else:
-            need = waiting(self.sessions)
-            self._open(need or self.sessions[:1], manual=True)
+            self._refresh_pending()
+            self._open(prioritize(self.sessions, self.pending), manual=True)
         self.drag = None
+
+    def _session_title(self, session):
+        project = session.get("project") or "session"
+        sid = str(session.get("session_id", ""))
+        return f"{project[:16]} · {sid[-6:]}" if sid else project
+
+    def _update_session_tooltip(self):
+        self.setToolTip("\n".join(
+            f"{s.get('project', 'session')} · {s.get('provider', '').upper()} · "
+            f"{s.get('session_id', '')}\n{s.get('cwd', '')}"
+            for s in self.shown))
+
+    def _overflow_rect(self):
+        if len(self.shown) <= MAX_PILLS:
+            return QRect()
+        _, total = self._layout()
+        return QRect(0, total - 22, PILL_W, 22)
+
+    def _show_session_chooser(self):
+        menu = QMenu(self)
+        for s in self.shown:
+            label = (f"{s.get('project') or 'session'} · "
+                     f"{s.get('provider', '').upper()} · "
+                     f"{s.get('session_id', '')} · {TIERS[s['tier']]['name']} · "
+                     f"{s.get('cwd', '')}")
+            action = menu.addAction(label)
+            action.triggered.connect(lambda checked=False, sid=s.get("session_id"):
+                                     self._choose_session(sid))
+        self._session_menu = menu
+        menu.aboutToHide.connect(menu.deleteLater)
+        menu.popup(self.mapToGlobal(self._overflow_rect().bottomLeft()))
+
+    def _choose_session(self, sid):
+        # Put the selected agent first so its approval controls are accessible.
+        sessions = prioritize(self.sessions, self.pending)
+        selected = [s for s in sessions if s.get("session_id") == sid]
+        self._open(selected + [s for s in sessions if s.get("session_id") != sid],
+                   manual=True)
+        self._selected_session = sid
 
     def set_muted(self, on):
         self.muted = bool(on); self._save_prefs()
@@ -695,20 +788,18 @@ class Stack(QWidget):
             pass
 
     def _answer(self, req, decision):
-        """Answer a pending approval, then drop that row and re-fit."""
+        """Answer a pending approval and refresh all remaining session rows."""
+        accepted = False
         try:
             import vigil_decide as VD
-            VD.decide(req["id"], decision, "widget")
+            accepted = VD.decide(req["id"], decision, "widget")
         except Exception:
             pass
-        self.pending.pop(req.get("session_id"), None)
-        self._refresh_pending()
-        if not self.pending:
-            self._close()
-        else:
-            self._place()
-        self.update()
+        # A False result is not a resolution. Re-read authoritative state on
+        # both outcomes; never optimistically remove this or another row.
+        self._poll()
         self.drag = None
+        return accepted
 
     def contextMenuEvent(self, e):
         build_menu(QApplication.instance(), self, self).exec(e.globalPos())

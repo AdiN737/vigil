@@ -11,7 +11,7 @@ TWO HARD RULES:
   2. Stay FAST. This runs in Claude's critical path. No glob, no re, no
      directory scans on the hot path. Measured: see _bench.py.
 """
-import sys, os, json, time, hashlib, uuid
+import sys, os, json, time, hashlib, uuid, ntpath
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -130,6 +130,14 @@ def provider_for(payload, hint=None):
     return "claude"
 
 
+def project_identity(cwd):
+    """Stable project key, including its full path rather than just basename."""
+    raw = str(cwd)
+    windows = bool(ntpath.splitdrive(raw)[0]) or "\\" in raw
+    normalized = ntpath.normcase(ntpath.normpath(raw)) if windows else os.path.abspath(raw)
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
+
 def identity_for(payload, provider):
     """Give Codex subagents their own rows while preserving the native id."""
     native = str(payload.get("session_id") or payload.get("prompt_id") or "")
@@ -170,6 +178,11 @@ def session_file(sid):
     s = "".join(c if c in SAFE else "_" for c in str(sid))[:80]
     if str(sid).startswith("codex:"):
         s = "codex_" + hashlib.sha256(str(sid).encode()).hexdigest()
+    elif not (len(s) == 36 and all(s[i] == "-" for i in (8, 13, 18, 23))
+              and all(c in "0123456789abcdef-" for c in s)):
+        # Lossy replacement, truncation, and Windows case folding can merge
+        # native IDs. Keep canonical lowercase UUID filenames compatible.
+        s = "session_" + hashlib.sha256(str(sid).encode()).hexdigest()
     return os.path.join(SESSIONS, (s or "unknown") + ".json")
 
 
@@ -201,7 +214,23 @@ def _user_is_at(project):
         return False
     try:
         from vigil_platform import foreground_title
-        return project.lower() in foreground_title()
+        if project.lower() not in foreground_title():
+            return False
+        # A title containing "web" cannot identify which of two agents in
+        # that project is focused. Never suppress a different agent's request.
+        matches = 0
+        for name in os.listdir(SESSIONS):
+            if not name.endswith(".json"):
+                continue
+            try:
+                with open(os.path.join(SESSIONS, name), encoding="utf-8") as f:
+                    record = json.load(f)
+                if (str(record.get("project", "")).lower() == project.lower()
+                        and time.time() - float(record.get("updated", 0)) < STALE_SECS):
+                    matches += 1
+            except (OSError, ValueError, TypeError, AttributeError):
+                continue
+        return matches == 1
     except Exception:
         return False
 
@@ -215,7 +244,10 @@ def main(state=None, provider_hint=None):
 
     sid, native_sid = identity_for(payload, provider)
     if not native_sid:
-        sid = f"{provider}:{project}"
+        # Without a producer session id, do not merge unrelated folders named
+        # "web". Multiple id-less agents in one folder cannot be distinguished.
+        agent = str(payload.get("agent_id") or "")
+        sid = f"{provider}:path:{project_identity(cwd)}:{agent}"
     path = session_file(sid)
 
     event = payload.get("hook_event_name") or ""
@@ -254,7 +286,8 @@ def main(state=None, provider_hint=None):
         "schema": 1, "provider": provider,
         "session_id": str(sid), "native_session_id": native_sid,
         "state": state, "label": label, "tier": tier,
-        "project": project, "cwd": cwd, "tool": tool, "detail": detail,
+        "project": project, "project_id": project_identity(cwd),
+        "cwd": cwd, "tool": tool, "detail": detail,
         "since": since, "updated": time.time(),
         "event": event,
     }
